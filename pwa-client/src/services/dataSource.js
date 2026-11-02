@@ -15,14 +15,28 @@ export const DEFAULT_DATA_MODE =
     ? DATA_MODES.API
     : DATA_MODES.MOCK;
 
-export function getAvailableZones() {
-  return MOCK_DATA.devices.map((device) => ({
-    id: device.zoneId,
-    shortLabel: `Salle ${device.zoneId.slice(-2)}`,
-    name: `Salle ${device.zoneId.slice(-2)}`,
-    description: 'Museum monitoring zone',
-    deviceId: device.deviceId,
-  }));
+export function getAvailableZones(devices = MOCK_DATA.devices) {
+  const zones = new Map();
+  for (const device of devices) {
+    const zoneId = device?.zoneId;
+    if (typeof zoneId !== 'string' || zoneId.trim() === '') {
+      continue;
+    }
+
+    if (!zones.has(zoneId)) {
+      const shortLabel = /^salle-\d+$/.test(zoneId)
+        ? `Salle ${zoneId.slice(-2)}`
+        : zoneId;
+      zones.set(zoneId, {
+        id: zoneId,
+        shortLabel,
+        name: shortLabel,
+        description: 'Museum monitoring zone',
+        deviceId: device.deviceId,
+      });
+    }
+  }
+  return [...zones.values()];
 }
 
 export function getAvailableDevices(mode, apiDevices = []) {
@@ -49,10 +63,12 @@ export async function getZoneData(zoneId, { mode = DEFAULT_DATA_MODE, signal } =
     throw new TypeError(`Unsupported data mode: ${mode}`);
   }
 
-  const [devices, measurements] = await Promise.all([
-    getApiDevices({ signal }),
-    getApiLatestMeasurements(zoneId, { signal }),
-  ]);
+  const devices = await getApiDevices({ signal });
+  if (!devices.some((device) => device?.zoneId === zoneId)) {
+    return { devices, measurements: [] };
+  }
+
+  const measurements = await getApiLatestMeasurements(zoneId, { signal });
   return { devices, measurements };
 }
 

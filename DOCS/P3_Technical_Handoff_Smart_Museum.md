@@ -8,10 +8,11 @@
 **Prepared:** 2 November 2026  
 **Audience:** Person 1 (IoT/Node-RED), Person 2 (Jakarta EE backend), project team, and professor
 
-> **Verification status:** This document describes the source currently in
-> `pwa-client/`. Automated tests and the production build were rerun on
-> 2 November 2026. The backend source and `contracts/openapi.yaml` are not in
-> this repository, so live API compatibility and CORS are not verified.
+> **Verification status:** This document describes the source in `pwa-client/`.
+> P2 source and OpenAPI behavior were inspected on the `sirine-week-1` branch
+> reference and are source-level compatible with the P3 read client. Live API
+> responses and browser CORS are not verified: `localhost:8080` was not
+> reachable during endpoint and preflight probes.
 
 <div class="page-break"></div>
 
@@ -29,7 +30,7 @@
 10. [Testing and quality assurance](#10-testing-and-quality-assurance)
 11. [UML and technical diagrams](#11-uml-and-technical-diagrams)
 12. [Known limitations and pending decisions](#12-known-limitations-and-pending-decisions)
-13. [Integration procedure after P2 publishes the backend](#13-integration-procedure-after-p2-publishes-the-backend)
+13. [Integration procedure against a running P2 backend](#13-integration-procedure-against-a-running-p2-backend)
 14. [Handoff summary and responsibilities](#14-handoff-summary-and-responsibilities)
 
 ---
@@ -71,10 +72,10 @@ describes frontend behavior and does not imply a verified live backend.
 | Feature | Behavior in the client | Main implementation |
 |---|---|---|
 | Dashboard and navigation | Smart Museum sidebar, dashboard heading, responsive content, section anchors, connection indicators | `src/pages/ConservationDashboard.jsx`, `src/components/Sidebar.jsx`, `src/styles/main.css` |
-| Zone selection | Selects `salle-01` or `salle-02`; the latest-data effect reruns for the selected zone | `ConservationDashboard.jsx`, `src/services/dataSource.js` |
+| Zone selection | Mock mode uses the documented examples; API mode derives and deduplicates zones from returned device records. Latest-data effect reruns for the selected zone. | `ConservationDashboard.jsx`, `src/services/dataSource.js` |
 | Measurement cards | Renders property groups with value, unit, `observedAt`, device, zone, source, optional gateway/quality, and freshness where fields exist | `src/components/MeasurementCard.jsx`, `src/utils/measurementData.js` |
 | Environmental properties | Supports `temperature`, `humidity`, `pressure`, and `illuminance`; only returned properties are rendered | `measurementData.js`, `ConservationDashboard.jsx` |
-| Device and zone information | Shows available device ID, zone ID, gateway ID, and source. No online/status field is invented. | `src/components/ZoneDetails.jsx` |
+| Device and zone information | Shows all devices returned for the selected zone and available IDs/gateway/source. In API mode, raw `status` and `lastSeenAt` are shown only when supplied; no online/offline semantics are inferred. | `src/components/ZoneDetails.jsx` |
 | Data provenance | Separates `real` and `simulated` source labels from the prominent mock/demo label. A mock record with `source: real` remains demonstration data. | `src/components/StatusMessage.jsx`, `MeasurementCard.jsx`, `mockData.js` |
 | Freshness | Computes freshness from measurement `observedAt`; invalid, future, or absent timestamps do not appear current | `src/utils/measurements.js`, `FreshnessIndicator.jsx`, `ConservationDashboard.jsx` |
 | Automatic refresh | Starts an immediate read and repeats at a configurable interval; prevents overlapping runs and cleans up on unmount | `src/services/refreshScheduler.js`, `ConservationDashboard.jsx` |
@@ -132,7 +133,8 @@ flowchart LR
    latest-data retrieval, exposes request/connection states, groups
    measurements, calculates freshness, and arranges dashboard sections.
 2. `dataSource.js` selects mock or API behavior. The API path retrieves the
-   device list and latest measurement array in parallel. The history path
+   device list, derives available zones, then retrieves the latest measurement
+   array for the selected zone when a matching device exists. The history path
    delegates to the central API client or filters existing demo fixtures.
 3. `api.js` centralizes base URL, GET requests, timeouts, JSON parsing,
    response validation, cancellation, query encoding, and API error types.
@@ -306,16 +308,20 @@ header and does not add authentication or service-token headers.
 
 | Method and path | Parameters | Expected response / current use |
 |---|---|---|
-| `GET /api/health` | None | Returns parsed JSON. The helper exists and is unit-tested; the dashboard does not call it as part of its current status indicator. The exact health response object is not validated by P3. |
-| `GET /api/devices` | None | Client expects a JSON array. Used with the latest endpoint to load device information. The API client validates that the top-level value is an array, not the schema of each device. |
-| `GET /api/measurements/latest?zoneId=...` | Required `zoneId` | Client expects a JSON array of measurements, not one object. Used for selected-zone dashboard data. Query value is encoded with `URLSearchParams`. |
-| `GET /api/measurements` | Optional `deviceId`, `property`, `from`, `to`, `limit` | Client expects a JSON measurement array. Used by history filters. Empty optional values are omitted; non-empty values are URL encoded. A supplied limit must be an integer from 1 to 5000. |
+| `GET /api/health` | None | P2 source returns `{status: "UP", mongo: "UP"|"DOWN"}`. The helper exists and is unit-tested; the dashboard status indicator does not call it. |
+| `GET /api/devices` | None | P2 source returns a JSON array with device identity/zone and optional gateway, status, and last-seen data. P3 validates the array and required `deviceId`/`zoneId`, and displays supplied status/time without interpreting them. |
+| `GET /api/measurements/latest?zoneId=...` | Required `zoneId` | P2 source returns a JSON array with latest records per device/property pair. P3 uses that array for selected-zone dashboard data. |
+| `GET /api/measurements` | Required `deviceId`, `property`; optional `from`, `to`, `limit` | P2 source accepts ISO time bounds, defaults limit to 1000, caps at 5000, and sorts by ascending `observedAt`. P3 encodes only these documented parameters; a supplied limit must be 1–5000. |
 
 The API service rejects non-2xx responses, network failures, request/body
 timeouts, invalid JSON, and invalid measurement arrays with explicit errors.
-It supports caller cancellation. In API mode, latest device and measurement
-requests are made concurrently using `Promise.all`; a failure is reported
-rather than converted into a successful empty response.
+It supports caller cancellation. Non-2xx JSON bodies shaped as
+`{error, message}` are retained as structured error metadata; only a
+safe-format error code and the generic HTTP failure are displayed, not the
+backend message.
+In API mode, the device list is read before the zone-specific latest endpoint;
+if no returned device belongs to the selected zone, the client does not issue
+the latest request.
 
 ### Measurement fields and client validation
 
@@ -337,31 +343,26 @@ and timestamps.
 | `quality` | Optional; current accepted values are `good`, `uncertain`, and `bad`. |
 | `receivedAt` | Optional parseable timestamp; preserved by validation but not used to calculate freshness. |
 
-The backend documentation states that `latest` returns one record per
-device/property pair. The frontend handles an array. This shape and the exact
-field requirements still require confirmation from P2 against the actual
-service and future OpenAPI definition.
+The source-level audit confirmed that `latest` returns an array with the
+latest record per device/property pair. The frontend handles that shape and
+the measurement fields described above. The backend device model includes
+`deviceId`, `type`, `zoneId`, `gatewayId`, `status`, and `lastSeenAt`.
+Measurements preserve `measurementId`, `deviceId`, `zoneId`, optional
+`gatewayId`, `property`, `value`, `unit`, `observedAt`, optional `receivedAt`,
+`source`, and optional `quality`.
 
 ### API contract items requiring confirmation from P2
 
-1. Exact top-level response shapes, required/optional fields, nullable fields,
-   source/quality values, and error response bodies.
-2. Whether latest always returns an array and its behavior for an empty zone.
-3. History ordering by `observedAt`, default limit 1000, and maximum 5000.
-4. Whether device records expose any status/online field and what it means.
-   P3 currently does not display a device status.
-5. CORS configuration for the actual development origin (normally
-   `http://localhost:5173`) and deployed PWA origin.
-6. Whether any read-endpoint authentication is required. P3 currently assumes
-   no read auth and sends no credentials; this must match the released API.
-7. Actual endpoint availability and health response schema.
-8. The eventual `contracts/openapi.yaml` and the agreed API version.
-
-The real backend source and `contracts/openapi.yaml` were not found in the
-inspected repository. Therefore actual endpoint compatibility, CORS, and a
-successful real browser integration are **unverified**. The API client tests
-use mocked Fetch responses only. Never put `X-Service-Token` in the browser;
-it is an ingestion-side concern, not a PWA credential.
+The P2 source-level audit confirmed the documented paths, array response
+shapes, measurement fields, history query names/limits/sorting, and open
+development read endpoints. The default CORS allowlist includes the documented
+`http://localhost:5173` origin. These are source-level findings, not live
+browser verification. Endpoint probes for health, devices, latest in both
+zones, history, and OPTIONS preflight all failed with curl error 7 because
+`localhost:8080` was not accepting connections. Browser CORS and actual
+responses remain unverified. The API client tests use mocked Fetch responses
+only. Never put `X-Service-Token` in the browser; it is an ingestion-side
+concern, not a PWA credential.
 
 ## 7. Mock data and demonstration behavior
 
@@ -407,6 +408,13 @@ dashboard effect stops the scheduler and aborts its active API request when
 zone/mode changes or the component unmounts. A separate five-second clock
 updates the displayed freshness as time passes. Errors are surfaced as API
 errors; they do not turn an earlier observation into a fresh one.
+
+P2's ingestion source permits observations up to five minutes in the future;
+P3 currently marks any future `observedAt` as unavailable. This conservative
+frontend policy is unchanged. Recommendation: retain the UI's unavailable
+state so future timestamps are never presented as current, and treat P2's
+five-minute allowance as clock-skew tolerance unless P2 confirms otherwise.
+The team must decide before changing the P3 rule.
 
 ## 9. PWA implementation
 
@@ -463,7 +471,7 @@ The following automated checks were run for this handoff on 2 November 2026.
 
 | Check | Result | Scope |
 |---|---|---|
-| `npm test` | **Passed: 31 Node tests and 3 React component tests** | Services/utilities/PWA assets, plus history-query labels, zone selection, and data-mode controls. |
+| `npm test` | **Passed: 33 Node tests and 6 React component tests** | Includes API error parsing, device/zone handling, safe error display, and empty-device behavior. |
 | `npm run build` | **Passed** | Vite production build; 46 modules transformed. |
 | `node --check public/service-worker.js` | **Passed** | Service-worker JavaScript syntax. |
 | `npm audit --offline` | **Passed: 0 vulnerabilities reported** | Current dependency tree and available local audit data. |
@@ -472,14 +480,17 @@ The following automated checks were run for this handoff on 2 November 2026.
 Automated coverage includes:
 
 - API GET endpoints, URL parameter encoding, measurement array validation,
-  and HTTP/network/timeout/invalid-JSON errors.
-- Mock device/zone filtering and history filtering/ranges/limits.
+  device field preservation, structured errors, and HTTP/network/timeout/
+  invalid-JSON errors.
+- Mock device/zone filtering, API-derived deduplicated zones, and history
+  filtering/ranges/limits.
 - Measurement grouping, unknown-property handling, optional metadata, and
   history chart point ordering.
 - Recent/stale/invalid/future/missing timestamp behavior and refresh interval
   validation/overlap prevention.
 - Manifest and offline-page assertions.
-- Component behavior for history labels, zone changes, and data-mode controls.
+- Component behavior for history labels, zone changes, API-derived zone/device
+  status fields, empty API devices, and data-mode controls.
 
 The API tests mock Fetch; they are not end-to-end integration tests. Browser
 requests to the actual backend, actual CORS, and physical-device installation
@@ -522,7 +533,7 @@ flowchart LR
     browser[/"Browser / operating system"/]
     api[/"Documented backend API"/]
     subgraph client["Smart Museum Client PWA"]
-        zone(["Select salle-01 or salle-02"])
+        zone(["Select an available zone"])
         latest(["View available environmental measurements"])
         device(["View device and zone information"])
         source(["Distinguish real, simulated, and demo data"])
@@ -616,32 +627,34 @@ flowchart LR
 | Issue/decision | Owner | Why it matters | Required action | Status |
 |---|---|---|---|---|
 | Physical illuminance device attribution | P1/P2 | The demo fixture associates illuminance with `bme280-01`; the architecture reference mentions BH1750 but does not confirm the record mapping. | Confirm sensor identity and device/zone attribution; then update fixtures/documentation if agreed. | Pending |
-| Gateway/device status field | P1/P2 | The PWA does not invent an online/status field. | Confirm whether status exists in device records and define its meaning. | Pending |
-| Backend source and actual endpoints | P2 | API integration currently relies on documented behavior and mocked Fetch tests. | Publish backend source and endpoint instructions; test all reads from the browser. | Pending |
-| Shared OpenAPI contract | P2 | Exact response types and optional fields cannot be verified against a contract file. | Provide and maintain `contracts/openapi.yaml`; compare it with client expectations. | Pending |
-| Response shapes and measurement fields | P2 | API client expects arrays and validates required fields/enums. | Confirm array shape, optional/null fields, source/quality values, health response, and errors. | Pending |
-| History ordering/limits | P2 | UI expects documented sorting and accepts limits up to 5000. | Confirm ascending `observedAt`, default 1000, maximum 5000, and empty-range behavior. | Pending |
-| CORS | P2 | Browser cross-origin calls may fail even when the API is reachable. | Allow and test the actual frontend origin in each environment. | Pending |
-| Authentication | P2 | Current client sends no auth headers. | Confirm whether read endpoints remain open and document any future client auth separately. Never expose ingestion token. | Pending |
-| Real backend integration | P3, after P2 | No backend is available in this repository. | Set API mode/base URL, verify browser requests/data/error behavior, and add or update integration tests where feasible. | Pending |
+| Device status semantics | P2 | Device model has `status` and `lastSeenAt`; P3 renders supplied values neutrally. | Confirm meanings/allowed values before adding any online/offline labels. | Pending |
+| Backend live availability | P2 | Source-level routes and DTOs were audited, but no service was reachable at `localhost:8080`. | Start a backend instance and provide its startup/configuration details for live testing. | Pending |
+| Shared OpenAPI contract | P2 | Backend branch source and its OpenAPI description were audited; live behavior is unverified. | Confirm the merged `contracts/openapi.yaml` remains aligned with source and the P3 validators. | Pending |
+| Response shapes and measurement fields | P2 | Source audit found expected arrays and measurement/device fields compatible. | Verify actual responses when service is running, including nullable optional values and error bodies. | Pending |
+| History ordering/limits | P2 | Source supports ascending `observedAt`, default 1000, maximum 5000. | Confirm these results from a running service and empty-range behavior. | Pending |
+| CORS | P2 | Source default allows `http://localhost:5173`; the OPTIONS request could not connect. | Verify browser requests and preflight from the actual Vite/deployed origins. | Pending |
+| Authentication | P2 | Inspected development read endpoints are open; P3 sends no credentials. | Confirm any change before deployment; never expose ingestion token. | Pending |
+| Real backend integration | P2/P3 | All current endpoint and preflight probes failed with curl error 7 (connection refused). | Start backend, set API URL/mode, then verify actual browser responses and errors. | Pending |
 | Physical PWA installation | P3 | Install prompt/platform behavior is browser-specific. | Verify installation on a supported physical device/browser. | Pending |
 | Final API documentation | P3 after P2 confirmation | Frontend docs must reflect the agreed contract rather than assumptions. | Update handoff and P3 guide after contract review. | Pending |
 
-## 13. Integration procedure after P2 publishes the backend
+## 13. Integration procedure against a running P2 backend
 
-1. Pull the agreed integration branch without overwriting teammate work.
-2. Inspect P2's backend source, startup guide, and actual `contracts/openapi.yaml`.
+1. Use the team's agreed integration checkout; do not switch branches or
+   overwrite teammate work as part of this P3 handoff.
+2. Recheck P2's backend source, startup guide, and merged
+   `contracts/openapi.yaml` at the integration revision.
 3. Compare endpoint paths, response arrays, fields, optional/null values,
    limits, sorting, health response, and error bodies with `src/services/api.js`.
 4. Start MongoDB and the backend using P2's instructions; do not assume
    commands or deployment configuration that P2 has not supplied.
-5. Check backend health and each documented read endpoint with P2-approved
-   requests. Verify actual latest and history response arrays.
+5. Check backend health and each documented read endpoint. Verify actual
+   device, latest, and history response bodies and status codes.
 6. Set `.env` to the real `VITE_API_BASE_URL` and `VITE_DATA_MODE=api`.
    Keep all credentials and ingestion tokens out of frontend variables.
 7. Restart Vite and record the actual origin printed in the terminal.
-8. Configure P2's CORS allowlist for that exact origin and the intended
-   deployed PWA origin.
+8. Confirm P2's CORS allowlist for that exact origin and the intended deployed
+   PWA origin; the default localhost origin has not been browser-tested.
 9. Open browser Network and Console panels. Check health/devices/latest/history
    requests, status codes, JSON parsing, and CORS preflight/error behavior.
 10. Test both zones, optional metadata, empty data, invalid fields, API errors,
@@ -671,22 +684,24 @@ flowchart LR
 
 ### Not verified or pending
 
-- Live backend behavior, actual endpoint responses, CORS, and API contract.
-- Device online/status fields and illuminance physical sensor attribution.
+- Live backend behavior, actual endpoint responses, and browser CORS.
+- Device status semantics and illuminance physical sensor attribution.
+- Team decision on whether and how to tolerate future `observedAt` timestamps.
 - Physical-device installation and standalone fallback display behavior.
-- Final alignment with `contracts/openapi.yaml` once P2 supplies it.
+- Confirm merged `contracts/openapi.yaml` alignment at the live integration revision.
 
 ### Responsibility handoff
 
 - **P1:** confirm illuminance sensor/device mapping and device/gateway status
   semantics.
-- **P2:** publish backend and OpenAPI contract; confirm endpoints, response
-  shapes, limits, CORS, and authentication expectations.
+- **P2:** provide a running backend; confirm status semantics, future-time
+  policy, merged OpenAPI alignment, CORS, and deployment authentication.
 - **P3:** connect and browser-test against the agreed backend, confirm
   installation on a supported device, and update documentation.
 
 **Team handoff message:** “P3 has delivered a mock-capable React/Vite client
-PWA, its documented read-only API integration boundary, automated tests, and
-editable diagrams. Mock mode/build are verified; real backend/CORS are not.
+PWA, API-derived zone/device display, structured error handling, automated
+tests, and editable diagrams. P2 source compatibility is reviewed; mock
+mode/build are verified, but live backend/CORS are not.
 Please confirm the physical illuminance mapping with P1 and publish the
 backend/OpenAPI contract with P2 before live integration.”

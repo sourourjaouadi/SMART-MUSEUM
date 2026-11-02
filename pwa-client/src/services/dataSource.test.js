@@ -18,6 +18,25 @@ test('lists only the documented mock zones and device identifiers', () => {
   );
 });
 
+test('derives unique zones from API devices without assuming zone identifiers', () => {
+  const devices = [
+    { deviceId: 'first', zoneId: 'gallery-east' },
+    { deviceId: 'second', zoneId: 'gallery-east' },
+    { deviceId: 'third', zoneId: 'archive-2' },
+    { deviceId: 'invalid', zoneId: ' ' },
+    { deviceId: 'missing-zone' },
+  ];
+
+  assert.deepEqual(
+    getAvailableZones(devices).map(({ id, shortLabel }) => [id, shortLabel]),
+    [
+      ['gallery-east', 'gallery-east'],
+      ['archive-2', 'archive-2'],
+    ],
+  );
+  assert.deepEqual(getAvailableZones([]), []);
+});
+
 test('loads demonstration devices and readings for the selected zone only', async () => {
   const result = await getZoneData('salle-02', { mode: DATA_MODES.MOCK });
 

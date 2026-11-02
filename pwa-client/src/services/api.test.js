@@ -78,11 +78,15 @@ test('retrieves health and device arrays without adding authentication headers',
   const client = createApiClient({
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      return jsonResponse(url.endsWith('/api/health') ? { status: 'ok' } : []);
+      return jsonResponse(
+        url.endsWith('/api/health')
+          ? { status: 'UP', mongo: 'UP' }
+          : [],
+      );
     },
   });
 
-  assert.deepEqual(await client.getHealth(), { status: 'ok' });
+  assert.deepEqual(await client.getHealth(), { status: 'UP', mongo: 'UP' });
   assert.deepEqual(await client.getDevices(), []);
   assert.deepEqual(requests.map(({ url }) => new URL(url).pathname), [
     '/api/health',
@@ -97,6 +101,28 @@ test('retrieves health and device arrays without adding authentication headers',
   );
 });
 
+test('preserves backend device status and last-seen fields', async () => {
+  const devices = [
+    {
+      deviceId: 'actual-device',
+      zoneId: 'gallery-east',
+      gatewayId: 'gateway-east',
+      status: 'ACTIVE',
+      lastSeenAt: '2026-11-02T08:30:00Z',
+    },
+  ];
+  const client = createApiClient({
+    fetchImpl: async () => jsonResponse(devices),
+  });
+
+  assert.deepEqual(await client.getDevices(), devices);
+
+  const invalidClient = createApiClient({
+    fetchImpl: async () => jsonResponse([null]),
+  });
+  await assert.rejects(invalidClient.getDevices(), { code: 'INVALID_RESPONSE' });
+});
+
 test('reports HTTP, network, invalid JSON and invalid measurement errors', async () => {
   const httpClient = createApiClient({
     fetchImpl: async () => jsonResponse({}, { status: 503, statusText: 'Unavailable' }),
@@ -105,6 +131,26 @@ test('reports HTTP, network, invalid JSON and invalid measurement errors', async
     assert.ok(error instanceof ApiError);
     assert.equal(error.code, 'HTTP_ERROR');
     assert.equal(error.status, 503);
+    return true;
+  });
+
+  const structuredErrorClient = createApiClient({
+    fetchImpl: async () =>
+      jsonResponse(
+        {
+          error: 'INTERNAL_ERROR',
+          message: 'Sensitive backend detail must not reach the interface.',
+        },
+        { status: 500, statusText: 'Internal Server Error' },
+      ),
+  });
+  await assert.rejects(structuredErrorClient.getHealth(), (error) => {
+    assert.equal(error.backendErrorCode, 'INTERNAL_ERROR');
+    assert.deepEqual(error.backendError, {
+      error: 'INTERNAL_ERROR',
+      message: 'Sensitive backend detail must not reach the interface.',
+    });
+    assert.equal(error.message.includes('Sensitive backend detail'), false);
     return true;
   });
 

@@ -13,9 +13,11 @@ device metadata, distinguishing real from simulated sources, checking
 measurement freshness, and querying historical readings. The interface also
 explains loading, empty, API-error, and browser-offline states.
 
-The backend implementation has not been supplied to the frontend project.
-Accordingly, **Demo preview** is the default, mock measurements are explicitly
-labelled as demonstration data, and real API/CORS behavior is unverified.
+The P2 backend source and OpenAPI description were inspected on the
+`sirine-week-1` branch reference. Source-level endpoint and response
+compatibility is documented below. The backend is not running at the PWA's
+configured `http://localhost:8080` address, so live API responses and browser
+CORS remain unverified. **Demo preview** remains the default.
 
 ### Implemented and intentionally out of scope
 
@@ -58,9 +60,13 @@ inventing a name or unit.
 
 ### Zone and device
 
-The dashboard offers `salle-01` and `salle-02`. For a selected zone, it shows
-available device identifiers, zone, gateway identifier, and source when
-provided. The documented examples are:
+In mock mode, the dashboard offers `salle-01` and `salle-02`. In API mode,
+available zones are derived from `GET /api/devices`, deduplicated by the
+returned `zoneId`, and are not hard-coded. For a selected zone, it shows the
+returned device identifiers, zone, gateway, and any provided status and
+`lastSeenAt` values. Status and last-seen values are displayed as supplied;
+the PWA does not interpret them as online/offline semantics. The documented
+example devices are:
 
 | Device | Zone | Gateway | Source |
 |---|---|---|---|
@@ -68,8 +74,9 @@ provided. The documented examples are:
 | `sim-bme280-02` | `salle-02` | `gw-sim` | `simulated` |
 
 These are the identifiers provided by the project specification; the mock
-values below are not physical sensor observations. A device online/status
-field is not currently presented as an implemented feature.
+values below are not physical sensor observations. Real API zones/devices are
+populated only from the device response. An empty device array produces an
+empty zone selector rather than falling back to mock zones.
 
 The current demonstration fixture associates illuminance with the documented
 `bme280-01` device. The architecture reference identifies a BH1750 as the
@@ -102,6 +109,13 @@ data refresh defaults to `VITE_REFRESH_INTERVAL_MS=15000` (15 seconds); the
 accepted range is 10–30 seconds. Refreshing does not itself make an old
 measurement fresh.
 
+The P2 backend source permits observations up to five minutes in the future,
+while the P3 freshness utility currently marks every future `observedAt` as
+unavailable. Recommendation: retain the conservative PWA rule so a future
+timestamp is never presented as current, and treat the backend allowance as
+clock-skew tolerance unless P2 confirms otherwise. The PWA intentionally keeps
+its current behavior pending the team's decision.
+
 The **Browser online/offline** indicator reports browser connectivity. The
 separate API indicator reports the data-source/API request state; freshness
 is a third, independent concept. In API mode, a failed request is surfaced as
@@ -129,10 +143,10 @@ in UI components.
 
 | Method and path | Client purpose |
 |---|---|
-| `GET /api/health` | Health-check helper exposed by the API service |
-| `GET /api/devices` | Retrieve device information |
-| `GET /api/measurements/latest?zoneId=...` | Retrieve the latest measurement array for a zone |
-| `GET /api/measurements?deviceId=...&property=...&from=...&to=...&limit=...` | Retrieve filtered history |
+| `GET /api/health` | P2 source returns `{status: "UP", mongo: "UP"|"DOWN"}`. Dashboard status currently comes from device/measurement requests, not this helper. |
+| `GET /api/devices` | Retrieve device array; P2 source includes `deviceId`, `type`, `zoneId`, `gatewayId`, `status`, and `lastSeenAt`. |
+| `GET /api/measurements/latest?zoneId=...` | Retrieve the latest measurement array for a zone; P2 source returns one per device/property pair. |
+| `GET /api/measurements?deviceId=...&property=...&from=...&to=...&limit=...` | Retrieve filtered history; P2 source requires device/property, accepts optional ISO time bounds, defaults to 1000, caps at 5000, and sorts ascending by `observedAt`. |
 
 The latest endpoint is treated as an **array**, with latest records per
 device/property pair; the client does not assume one measurement per response.
@@ -155,10 +169,15 @@ The documented measurement shape is:
 | `receivedAt` | Optional backend receipt time |
 | `quality` | Optional `good`, `uncertain`, or `bad` quality value |
 
-The API client validates response shape, reports HTTP/network/timeout/invalid
-JSON errors, and sends no authorization header, service token, or ingestion
-secret. No read-endpoint authentication is assumed in this frontend
-configuration.
+Source-level comparison found the frontend endpoint paths, latest array
+handling, history parameters, and measurement DTO fields compatible with P2's
+backend source. The API client validates response shape, reports
+HTTP/network/timeout/invalid JSON errors, and safely parses structured
+`{error, message}` HTTP error bodies. The UI shows the HTTP failure and a
+safe-format error code only; it does not display the backend message. No
+authorization header, service token, or ingestion secret is sent. P2's
+development read endpoints do not require authentication in the inspected
+source.
 
 ### Mock mode and real API mode
 
@@ -171,9 +190,12 @@ configuration.
 - Environment variables are public build-time configuration. Do not put
   credentials, `X-Service-Token`, or ingestion secrets in the PWA.
 
-The backend source is not present. Actual endpoint compatibility, response
-details, browser CORS, and a successful live connection therefore remain
-unverified; API-client unit tests use mocked Fetch responses only.
+The P2 CORS source allows the documented development origin
+`http://localhost:5173` by default; this configuration has not been exercised
+by a browser. Live probes to `/api/health`, `/api/devices`, latest for both
+documented zones, history, and an OPTIONS preflight all failed because a
+server could not be reached at `localhost:8080`. API-client unit tests use
+mocked Fetch responses and do not establish live integration.
 
 ## 5. UML and data-flow diagrams
 
@@ -219,7 +241,9 @@ npm run preview
 
 ### Read the dashboard
 
-1. Select `salle-01` or `salle-02` from **Monitoring zone**.
+1. Select an available zone from **Monitoring zone**. Mock mode provides
+   `salle-01` and `salle-02`; API mode lists zones present in the device
+   response.
 2. Read only the measurement cards that have values. Each card includes its
    measurement time and available device/source/quality metadata.
 3. Check both the source label and the data-mode label. A fixture with
@@ -279,12 +303,14 @@ The Node test suite covers:
 | Mock data and data source | Documented devices/zones, zone filtering, empty data, mock history filtering/ranges/limits |
 | Measurement presentation | Property grouping, optional metadata, unknown properties, chart point transformation |
 | Freshness and refresh | Recent/stale/missing/invalid/future timestamps, threshold configuration, 15-second scheduler, interval bounds, overlap prevention, refresh errors |
-| API client | Mocked Fetch calls for health/devices/latest/history, query encoding, measurement shape validation, no auth/token header, HTTP/network/timeout/invalid JSON failures |
+| API client | Mocked Fetch calls for health/devices/latest/history, query encoding, measurement/device shape validation, status/last-seen preservation, no auth/token header, structured errors, HTTP/network/timeout/invalid JSON failures |
 | PWA assets | Manifest identity/settings/icon dimensions and the offline fallback page |
-| React components | History labels remain tied to submitted measurements when filters are edited; dashboard zone selection updates measurements/device details; data-source controls toggle |
+| React components | History labels remain tied to submitted measurements when filters are edited; dashboard zone selection updates measurements/device details; API zones are deduplicated from device records and optional status fields display without inferred semantics; empty API devices and data-source controls |
 
-These are unit/component tests, not an end-to-end live-backend suite. No
-backend integration test can pass until the backend is available.
+These are unit/component tests, not an end-to-end live-backend suite. The P2
+source-level contract has been reviewed, but live backend integration and CORS
+remain unverified because the backend was not reachable during the latest
+probes.
 
 Manual browser checks:
 

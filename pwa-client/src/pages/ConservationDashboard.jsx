@@ -23,21 +23,43 @@ import {
   getStaleAfterMs,
 } from '../utils/measurements.js';
 
-const ZONES = getAvailableZones();
 const INITIAL_DATA_MODE = DEFAULT_DATA_MODE;
-const INITIAL_LIVE_STATE = { status: 'idle', devices: [], measurements: [], error: null };
+const INITIAL_LIVE_STATE = {
+  status: 'idle',
+  devices: [],
+  measurements: [],
+  error: null,
+  errorCode: null,
+};
 const STALE_AFTER_MS = getStaleAfterMs(import.meta.env.VITE_STALE_AFTER_MS);
 const REFRESH_INTERVAL_MS = getRefreshIntervalMs(
   import.meta.env.VITE_REFRESH_INTERVAL_MS,
 );
 
 export default function ConservationDashboard() {
-  const [selectedZoneId, setSelectedZoneId] = useState(ZONES[0].id);
+  const [selectedZoneId, setSelectedZoneId] = useState(
+    INITIAL_DATA_MODE === DATA_MODES.API ? '' : getAvailableZones()[0]?.id ?? '',
+  );
   const [dataMode, setDataMode] = useState(INITIAL_DATA_MODE);
   const [liveState, setLiveState] = useState(INITIAL_LIVE_STATE);
   const [now, setNow] = useState(() => Date.now());
-  const selectedZone = ZONES.find((zone) => zone.id === selectedZoneId) ?? ZONES[0];
   const isDemo = dataMode === DATA_MODES.MOCK;
+  const zones = useMemo(
+    () => getAvailableZones(isDemo ? undefined : liveState.devices),
+    [isDemo, liveState.devices],
+  );
+  const selectedZone = zones.find((zone) => zone.id === selectedZoneId) ?? {
+    id: selectedZoneId,
+    shortLabel: selectedZoneId || 'No zone selected',
+    name: selectedZoneId || 'No zone selected',
+    description: 'Zone information is unavailable.',
+  };
+
+  useEffect(() => {
+    if (!zones.some((zone) => zone.id === selectedZoneId)) {
+      setSelectedZoneId(zones[0]?.id ?? '');
+    }
+  }, [selectedZoneId, zones]);
 
   useEffect(() => {
     let active = true;
@@ -47,7 +69,7 @@ export default function ConservationDashboard() {
       activeController = new AbortController();
       setLiveState((previous) =>
         previous.measurements.length === 0
-          ? { ...previous, status: 'loading', error: null }
+          ? { ...previous, status: 'loading', error: null, errorCode: null }
           : previous,
       );
 
@@ -62,6 +84,7 @@ export default function ConservationDashboard() {
             devices,
             measurements,
             error: null,
+            errorCode: null,
           });
         }
       } catch (error) {
@@ -70,6 +93,7 @@ export default function ConservationDashboard() {
             ...previous,
             status: 'error',
             error: error.message,
+            errorCode: error.backendErrorCode ?? null,
           }));
         }
       }
@@ -98,14 +122,14 @@ export default function ConservationDashboard() {
     [liveState.measurements, selectedZoneId],
   );
 
-  const matchedDevice =
-    liveState.devices.find((device) => device.deviceId === selectedZone.deviceId) ??
-    null;
+  const zoneDevices = liveState.devices.filter(
+    (device) => device?.zoneId === selectedZoneId,
+  );
 
   const status =
     liveState.status === 'loading' || liveState.status === 'error'
       ? liveState.status
-      : !matchedDevice
+      : !selectedZoneId || zoneDevices.length === 0
         ? 'unavailable'
         : measurements.length === 0
           ? 'empty'
@@ -168,8 +192,10 @@ export default function ConservationDashboard() {
                 id="zone-selector"
                 value={selectedZoneId}
                 onChange={(event) => setSelectedZoneId(event.target.value)}
+                disabled={zones.length === 0}
               >
-                {ZONES.map((zone) => (
+                {zones.length === 0 && <option value="">No zones available</option>}
+                {zones.map((zone) => (
                   <option key={zone.id} value={zone.id}>
                     {zone.shortLabel} · {zone.id}
                   </option>
@@ -184,7 +210,11 @@ export default function ConservationDashboard() {
                   name="data-mode"
                   value={DATA_MODES.MOCK}
                   checked={isDemo}
-                  onChange={() => setDataMode(DATA_MODES.MOCK)}
+                  onChange={() => {
+                    setLiveState(INITIAL_LIVE_STATE);
+                    setSelectedZoneId(getAvailableZones()[0]?.id ?? '');
+                    setDataMode(DATA_MODES.MOCK);
+                  }}
                 />
                 <span>Demo preview</span>
               </label>
@@ -194,7 +224,11 @@ export default function ConservationDashboard() {
                   name="data-mode"
                   value={DATA_MODES.API}
                   checked={!isDemo}
-                  onChange={() => setDataMode(DATA_MODES.API)}
+                  onChange={() => {
+                    setLiveState(INITIAL_LIVE_STATE);
+                    setSelectedZoneId('');
+                    setDataMode(DATA_MODES.API);
+                  }}
                 />
                 <span>Live API</span>
               </label>
@@ -204,6 +238,7 @@ export default function ConservationDashboard() {
           <StatusMessage
             status={status}
             error={liveState.error}
+            errorCode={liveState.errorCode}
             isDemo={isDemo}
           />
 
@@ -275,13 +310,13 @@ export default function ConservationDashboard() {
               <h2>{selectedZone.name}</h2>
               <p>{selectedZone.description}</p>
             </div>
-            <ZoneDetails zone={selectedZone} device={matchedDevice} />
+            <ZoneDetails zone={selectedZone} devices={zoneDevices} />
           </section>
 
           <AlertsPlaceholder />
 
           <HistoricalMeasurements
-            zones={ZONES}
+            zones={zones}
             devices={liveState.devices}
             mode={dataMode}
           />

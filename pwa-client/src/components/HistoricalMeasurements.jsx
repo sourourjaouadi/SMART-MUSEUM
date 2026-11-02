@@ -62,6 +62,17 @@ export default function HistoricalMeasurements({
     '';
 
   useEffect(() => {
+    if (zones.some((zone) => zone.id === zoneId)) {
+      return;
+    }
+
+    setZoneId(zones[0]?.id ?? '');
+    setDeviceId('');
+    setQuery(null);
+    setResult({ status: 'idle', measurements: [], error: null, mode: null });
+  }, [zoneId, zones]);
+
+  useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
     window.addEventListener('online', handleOnline);
@@ -94,6 +105,7 @@ export default function HistoricalMeasurements({
             ...previous,
             status: 'error',
             error: error.message,
+            errorCode: error.backendErrorCode ?? null,
           }));
         }
       });
@@ -119,6 +131,7 @@ export default function HistoricalMeasurements({
         status: 'error',
         measurements: [],
         error: 'No device is available for the selected zone.',
+        errorCode: null,
         mode,
       });
       return;
@@ -137,7 +150,13 @@ export default function HistoricalMeasurements({
         throw new RangeError('Start date must not be after end date.');
       }
     } catch (error) {
-      setResult({ status: 'error', measurements: [], error: error.message, mode });
+      setResult({
+        status: 'error',
+        measurements: [],
+        error: error.message,
+        errorCode: null,
+        mode,
+      });
       return;
     }
 
@@ -175,12 +194,14 @@ export default function HistoricalMeasurements({
           <span>Zone</span>
           <select
             value={zoneId}
+            disabled={zones.length === 0}
             onChange={(event) => {
               setZoneId(event.target.value);
               setDeviceId('');
               setResult({ status: 'idle', measurements: [], error: null });
             }}
           >
+            {zones.length === 0 && <option value="">No zones available</option>}
             {zones.map((zone) => (
               <option key={zone.id} value={zone.id}>{zone.id}</option>
             ))}
@@ -266,6 +287,7 @@ export default function HistoricalMeasurements({
       {result.status === 'error' && (
         <p className="history-state history-state--error" role="alert">
           {isOffline ? 'History unavailable while offline.' : `History request failed: ${result.error}`}
+          {result.errorCode && ` (backend code: ${result.errorCode})`}
         </p>
       )}
       {result.status === 'loading' && (

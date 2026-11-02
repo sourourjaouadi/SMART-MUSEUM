@@ -2,14 +2,46 @@ const DEFAULT_API_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT_MS = 10_000;
 const VALID_SOURCES = new Set(['real', 'simulated']);
 const VALID_QUALITY_VALUES = new Set(['good', 'uncertain', 'bad']);
+const SAFE_BACKEND_ERROR_CODE = /^[A-Z0-9_]{1,64}$/;
 
 export class ApiError extends Error {
-  constructor(message, { code, status, cause } = {}) {
+  constructor(message, { code, status, cause, backendError } = {}) {
     super(message, { cause });
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
+    this.backendError = backendError;
+    this.backendErrorCode =
+      typeof backendError?.error === 'string' &&
+      SAFE_BACKEND_ERROR_CODE.test(backendError.error)
+        ? backendError.error
+        : undefined;
   }
+}
+
+async function readBackendError(response) {
+  const text = await response.text();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload) ||
+    typeof payload.error !== 'string' ||
+    typeof payload.message !== 'string'
+  ) {
+    return undefined;
+  }
+
+  return {
+    error: payload.error,
+    message: payload.message,
+  };
 }
 
 function validateMeasurements(payload, endpoint) {
@@ -80,6 +112,33 @@ function validateDevices(payload) {
       code: 'INVALID_RESPONSE',
     });
   }
+
+  const optionalStringFields = ['gatewayId', 'status', 'lastSeenAt'];
+  const invalidIndex = payload.findIndex((device) => {
+    if (
+      !device ||
+      typeof device !== 'object' ||
+      Array.isArray(device) ||
+      typeof device.deviceId !== 'string' ||
+      typeof device.zoneId !== 'string'
+    ) {
+      return true;
+    }
+
+    return optionalStringFields.some(
+      (field) =>
+        device[field] != null &&
+        typeof device[field] !== 'string',
+    );
+  });
+
+  if (invalidIndex !== -1) {
+    throw new ApiError(
+      `/api/devices returned an invalid device at index ${invalidIndex}.`,
+      { code: 'INVALID_RESPONSE' },
+    );
+  }
+
   return payload;
 }
 
@@ -133,9 +192,27 @@ export function createApiClient({
       }
 
       if (!response.ok) {
+        let backendError;
+        try {
+          backendError = await readBackendError(response);
+        } catch (error) {
+          if (controller.signal.aborted) {
+            if (controller.signal.reason?.name === 'TimeoutError') {
+              throw new ApiError(`GET ${path} timed out after ${timeoutMs} ms.`, {
+                code: 'TIMEOUT',
+                cause: error,
+              });
+            }
+            throw error;
+          }
+        }
         throw new ApiError(
-          `GET ${path} failed with ${response.status}${response.statusText ? ` ${response.statusText}` : ''}.`,
-          { code: 'HTTP_ERROR', status: response.status },
+          `GET ${path} failed with HTTP ${response.status}.`,
+          {
+            code: 'HTTP_ERROR',
+            status: response.status,
+            backendError,
+          },
         );
       }
 

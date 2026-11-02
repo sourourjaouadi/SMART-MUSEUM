@@ -26,7 +26,7 @@ const STATUS_CONTENT = {
   },
 };
 
-export default function StatusMessage({ status, error, isDemo }) {
+export default function StatusMessage({ status, error, errorCode, isDemo }) {
   if (isDemo) {
     return (
       <div className="status-message status-message--demo" role="status">
@@ -56,6 +56,11 @@ export default function StatusMessage({ status, error, isDemo }) {
         <p>{content.detail}</p>
         {status === 'error' && error && (
           <p className="status-message__error-detail">{error}</p>
+        )}
+        {status === 'error' && errorCode && (
+          <p className="status-message__error-detail">
+            Backend error code: {errorCode}
+          </p>
         )}
       </div>
     </div>
