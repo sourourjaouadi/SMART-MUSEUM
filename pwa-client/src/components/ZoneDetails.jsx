@@ -1,0 +1,34 @@
+export default function ZoneDetails({ zone, device }) {
+  const details = [
+    ['Device ID', device?.deviceId],
+    ['Zone', device?.zoneId ?? zone.id],
+    ['Gateway ID', device?.gatewayId],
+    ['Source', device?.source],
+  ];
+
+  return (
+    <section className="panel zone-details" aria-labelledby="zone-details-title">
+      <div className="panel__heading">
+        <div>
+          <p className="eyebrow">Connected environment</p>
+          <h2 id="zone-details-title">Device &amp; zone</h2>
+        </div>
+        <span className="zone-details__tag">{zone.shortLabel}</span>
+      </div>
+      {device ? (
+        <dl className="zone-details__list">
+          {details.filter(([, value]) => value).map(([label, value]) => (
+            <div className="zone-details__row" key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="zone-details__empty">
+          Device information is unavailable for this zone.
+        </p>
+      )}
+    </section>
+  );
+}
