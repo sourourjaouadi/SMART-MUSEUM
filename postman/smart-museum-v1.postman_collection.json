@@ -1,0 +1,474 @@
+{
+  "info": {
+    "name": "Smart Museum API v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "serviceToken",
+      "value": "dev-token"
+    },
+    {
+      "key": "mid",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/health"
+        }
+      }
+    },
+    {
+      "name": "Ingest valide -> 202",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('mid', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 202', function () { pm.response.to.have.status(202); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"bme280-01\",\n  \"zoneId\": \"salle-01\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"temperature\",\n  \"value\": 21.4,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Ingest doublon -> 200",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"bme280-01\",\n  \"zoneId\": \"salle-01\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"temperature\",\n  \"value\": 21.4,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Ingest sans jeton -> 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 401', function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"bme280-01\",\n  \"zoneId\": \"salle-01\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"temperature\",\n  \"value\": 21.4,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Ingest schema invalide -> 400",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('mid', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 400', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"bme280-01\",\n  \"zoneId\": \"salle-01\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"radiation\",\n  \"value\": 21.4,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Ingest JSON casse -> 400",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('mid', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 400', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ pas du json"
+        }
+      }
+    },
+    {
+      "name": "Ingest hors plage -> 422",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('mid', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 422', function () { pm.response.to.have.status(422); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"bme280-01\",\n  \"zoneId\": \"salle-01\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"temperature\",\n  \"value\": 120,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Ingest appareil inconnu -> 403",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('mid', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 403', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"inconnu-99\",\n  \"zoneId\": \"salle-01\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"temperature\",\n  \"value\": 21.4,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Ingest zone incoherente -> 403",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('mid', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 403', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Service-Token",
+            "value": "{{serviceToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingest/measurements"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"measurementId\": \"{{mid}}\",\n  \"deviceId\": \"bme280-01\",\n  \"zoneId\": \"salle-02\",\n  \"gatewayId\": \"gw-01\",\n  \"property\": \"temperature\",\n  \"value\": 21.4,\n  \"unit\": \"°C\",\n  \"observedAt\": \"{{$isoTimestamp}}\",\n  \"source\": \"real\",\n  \"quality\": \"good\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Devices -> 200",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/devices"
+        }
+      }
+    },
+    {
+      "name": "Latest salle-01 -> 200",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/measurements/latest?zoneId=salle-01"
+        }
+      }
+    },
+    {
+      "name": "Latest sans zoneId -> 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 400', function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/measurements/latest"
+        }
+      }
+    },
+    {
+      "name": "Historique -> 200",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('statut 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/measurements?deviceId=bme280-01&property=temperature"
+        }
+      }
+    }
+  ]
+}
