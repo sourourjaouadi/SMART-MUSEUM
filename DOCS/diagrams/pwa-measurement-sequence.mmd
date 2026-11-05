@@ -1,0 +1,38 @@
+sequenceDiagram
+    %% Smart Museum: read-only PWA retrieval and separate ingestion context
+    actor Staff as Museum staff
+    participant PWA as Client PWA
+    participant API as Backend API
+    database MongoDB
+    participant Sensor
+    participant Edge as Gateway / Node-RED
+
+    rect rgb(233, 240, 235)
+        Note over Staff,MongoDB: Read-only measurement retrieval — Person 3 client scope
+        Staff->>PWA: Select zone and view dashboard
+        PWA->>API: GET /api/devices
+        API->>MongoDB: Read device records
+        MongoDB-->>API: Device records
+        API-->>PWA: JSON device array
+        PWA->>API: GET /api/measurements/latest?zoneId=...
+        API->>MongoDB: Read latest records for zone
+        MongoDB-->>API: Latest measurement documents
+        API-->>PWA: JSON measurement array
+        PWA->>PWA: Display source and calculate freshness from observedAt
+        opt Staff requests history
+            Staff->>PWA: Select device, property, range, and limit
+            PWA->>API: GET /api/measurements?deviceId=...&property=...&from=...&to=...&limit=...
+            API->>MongoDB: Read matching measurements
+            MongoDB-->>API: Matching measurement documents
+            API-->>PWA: JSON history array
+            PWA-->>Staff: Render chart and accessible table
+        end
+    end
+
+    rect rgb(250, 242, 229)
+        Note over Sensor,MongoDB: Separate ingestion context — not implemented by Person 3
+        Sensor->>Edge: Sensor telemetry
+        Edge->>API: Forward telemetry to backend ingestion
+        API->>MongoDB: Validate and persist measurement
+        MongoDB-->>API: Persistence result
+    end

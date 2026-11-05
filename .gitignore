@@ -1,0 +1,8 @@
+.env
+*.log
+target/
+node_modules/
+__pycache__/
+.idea/
+.vscode/
+config.yaml

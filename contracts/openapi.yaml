@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: Smart Museum API
+  version: 1.1.0
+  description: |
+    Contrat v1.1. Un doublon de measurementId renvoie 200 (idempotence), pas 409.
+    Lecture ouverte en dev ; authentification ADMIN/CLIENT ajoutee en S3-S4.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/health:
+    get:
+      summary: Etat du service et de MongoDB
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: UP }
+                  mongo: { type: string, enum: [UP, DOWN] }
+  /api/ingest/measurements:
+    post:
+      summary: Ingestion d'une mesure (Node-RED uniquement)
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Measurement' }
+      responses:
+        '202': { description: Mesure acceptee }
+        '200': { description: Doublon, deja traitee }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/devices:
+    get:
+      summary: Liste des appareils
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Device' }
+  /api/measurements/latest:
+    get:
+      summary: Derniere mesure de chaque propriete pour une zone
+      parameters:
+        - { name: zoneId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Measurement' }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/measurements:
+    get:
+      summary: Historique
+      parameters:
+        - { name: deviceId, in: query, required: true, schema: { type: string } }
+        - { name: property, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 1000, maximum: 5000 } }
+      responses:
+        '200':
+          description: OK, tri par observedAt croissant
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Measurement' }
+        '400': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+  responses:
+    Error:
+      description: Erreur (400 schema, 401 jeton, 403 appareil inconnu/non fiable, 422 hors plage)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string, enum: [INVALID_SCHEMA, UNAUTHORIZED, DEVICE_NOT_TRUSTED, OUT_OF_RANGE] }
+        message: { type: string }
+    Measurement:
+      type: object
+      required: [measurementId, deviceId, zoneId, property, value, unit, observedAt, source]
+      properties:
+        measurementId: { type: string, format: uuid }
+        deviceId: { type: string }
+        zoneId: { type: string }
+        gatewayId: { type: string }
+        property: { type: string, enum: [temperature, humidity, pressure, illuminance] }
+        value: { type: number }
+        unit: { type: string }
+        observedAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time, readOnly: true }
+        source: { type: string, enum: [real, simulated] }
+        quality: { type: string, enum: [good, uncertain, bad], default: good }
+    Device:
+      type: object
+      properties:
+        deviceId: { type: string }
+        type: { type: string }
+        zoneId: { type: string }
+        gatewayId: { type: string }
+        status: { type: string, enum: [pending, active, rejected, offline] }
+        lastSeenAt: { type: string, format: date-time }

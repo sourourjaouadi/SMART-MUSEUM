@@ -1,0 +1,28 @@
+flowchart LR
+    staff[/"Museum staff, curator, or conservator"/]
+    browser[/"Browser / operating system"/]
+    api[/"Documented backend API"/]
+
+    subgraph client["Smart Museum Client PWA"]
+        zone(["Select an available zone"])
+        latest(["View available environmental measurements"])
+        device(["View device and zone information"])
+        source(["Distinguish real, simulated, and demo data"])
+        freshness(["Check measurement freshness"])
+        history(["Filter and inspect measurement history"])
+        state(["Understand loading, empty, error, and offline states"])
+        install(["Install / update the PWA"])
+    end
+
+    staff --- zone
+    staff --- latest
+    staff --- device
+    staff --- source
+    staff --- freshness
+    staff --- history
+    staff --- state
+    staff --- install
+    browser --- install
+    api --- latest
+    api --- device
+    api --- history

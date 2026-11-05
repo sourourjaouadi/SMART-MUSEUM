@@ -1,0 +1,23 @@
+flowchart LR
+    staff["Museum staff"]
+    pwa["Client PWA"]
+    api["Backend API"]
+    db[("MongoDB")]
+
+    staff -->|"1: Select zone / open dashboard"| pwa
+    pwa -->|"1.1: GET /api/devices"| api
+    api -->|"1.1.1: Read device records"| db
+    db -->|"1.1.2: Device records"| api
+    api -->|"1.1.3: JSON device array"| pwa
+    pwa -->|"1.2: GET /api/measurements/latest?zoneId=..."| api
+    api -->|"1.2.1: Read latest measurements for zone"| db
+    db -->|"1.2.2: Latest measurement documents"| api
+    api -->|"1.2.3: JSON measurement array"| pwa
+    pwa -->|"1.3: Display values, source and observedAt freshness"| staff
+
+    staff -->|"2: Submit history filters"| pwa
+    pwa -->|"2.1: GET /api/measurements?deviceId=...&property=...&from=...&to=...&limit=..."| api
+    api -->|"2.1.1: Read matching measurements"| db
+    db -->|"2.1.2: Matching measurement documents"| api
+    api -->|"2.1.3: JSON history array"| pwa
+    pwa -->|"2.2: Display chart and table"| staff
