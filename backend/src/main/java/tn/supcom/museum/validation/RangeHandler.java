@@ -25,6 +25,7 @@ public class RangeHandler extends ValidationHandler {
     @Override
     public Outcome handle(Measurement m) {
         double[] r = LIMITS.get(m.property);
+        if (r == null) throw ApiException.badRequest("property inconnue : " + m.property);
         if (m.value < r[0] || m.value > r[1])
             throw ApiException.unprocessable(m.property + " hors plage [" + r[0] + ", " + r[1] + "]");
         if ("bad".equals(m.quality))

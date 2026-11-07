@@ -1,9 +1,4 @@
-/*
- * Module  : CorsFilter
- * Auteur  : P2 (Backend)
- * Date    : 2026-11-02
- * Version : 1.0
- */
+
 package tn.supcom.museum.config;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
@@ -13,7 +8,6 @@ import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
-import tn.supcom.museum.infra.MongoProvider;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -25,7 +19,7 @@ import java.util.stream.Collectors;
 public class CorsFilter implements ContainerRequestFilter, ContainerResponseFilter {
 
     private final Set<String> allowed = Arrays
-            .stream(MongoProvider.env("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(","))
+            .stream(Env.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(","))
             .map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
 
     @Override
@@ -42,8 +36,9 @@ public class CorsFilter implements ContainerRequestFilter, ContainerResponseFilt
             var h = res.getHeaders();
             h.putSingle("Access-Control-Allow-Origin", origin);
             h.putSingle("Vary", "Origin");
-            h.putSingle("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Service-Token");
+            h.putSingle("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Service-Token, X-Admin-Token");
             h.putSingle("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            h.putSingle("Access-Control-Expose-Headers", "Link, Location");
             h.putSingle("Access-Control-Max-Age", "3600");
         }
     }

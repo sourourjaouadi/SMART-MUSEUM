@@ -1,10 +1,12 @@
 openapi: 3.0.3
 info:
   title: Smart Museum API
-  version: 1.1.0
+  version: 1.2.0
   description: |
-    Contrat v1.1. Un doublon de measurementId renvoie 200 (idempotence), pas 409.
-    Lecture ouverte en dev ; authentification ADMIN/CLIENT ajoutee en S3-S4.
+    Contrat v1.2. Un doublon de measurementId renvoie 200 (idempotence), pas 409.
+    v1.2 : Thing Descriptions W3C WoT 1.1 (JSON-LD 1.1) et decouverte pending -> active.
+    Lecture ouverte en dev ; authentification ADMIN/CLIENT ajoutee en S3-S4
+    (jeton X-Admin-Token provisoire pour l'approbation des appareils).
 servers:
   - url: http://localhost:8080
 paths:
@@ -36,10 +38,16 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
+        '422':
+          description: Hors plage (OUT_OF_RANGE) ou propriete/unite non declaree dans la TD (UNDECLARED_PROPERTY)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /api/devices:
     get:
       summary: Liste des appareils
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, offline] } }
       responses:
         '200':
           description: OK
@@ -48,6 +56,100 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Device' }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/devices/{deviceId}:
+    get:
+      summary: Detail d'un appareil
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      responses:
+        '200':
+          description: OK
+          headers:
+            Link:
+              description: RFC 8288, <.../api/things/{deviceId}>; rel="describedby"; type="application/td+json"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/devices/{deviceId}/approve:
+    post:
+      summary: ADMIN - approuver un appareil decouvert (pending -> active)
+      security: [{ adminToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      responses:
+        '200':
+          description: Appareil actif
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/devices/{deviceId}/reject:
+    post:
+      summary: ADMIN - rejeter un appareil (ses mesures seront refusees)
+      security: [{ adminToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      responses:
+        '200':
+          description: Appareil rejete
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/things:
+    post:
+      summary: Annonce de decouverte (Node-RED relaie le topic MQTT museum/v1/{zoneId}/{deviceId}/td)
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThingAnnouncement' }
+      responses:
+        '201':
+          description: Nouvel appareil enregistre en statut pending
+          headers:
+            Location: { schema: { type: string } }
+            Link: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnnouncementResult' }
+        '200':
+          description: Appareil deja connu, TD mise a jour (statut inchange)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnnouncementResult' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    get:
+      summary: Toutes les Thing Descriptions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ThingDescription' }
+  /api/things/{deviceId}:
+    get:
+      summary: Thing Description W3C WoT 1.1 d'un appareil
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/td+json:
+              schema: { $ref: '#/components/schemas/ThingDescription' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/measurements/latest:
     get:
       summary: Derniere mesure de chaque propriete pour une zone
@@ -73,7 +175,7 @@ paths:
         - { name: limit, in: query, schema: { type: integer, default: 1000, maximum: 5000 } }
       responses:
         '200':
-          description: OK, tri par observedAt croissant
+          description: Les "limit" mesures les plus recentes, triees par observedAt croissant
           content:
             application/json:
               schema:
@@ -86,9 +188,19 @@ components:
       type: apiKey
       in: header
       name: X-Service-Token
+    adminToken:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9._-]{1,64}$' }
   responses:
     Error:
-      description: Erreur (400 schema, 401 jeton, 403 appareil inconnu/non fiable, 422 hors plage)
+      description: Erreur (400 schema/TD, 401 jeton, 403 appareil inconnu/non fiable/rejete, 404 introuvable, 409 etat invalide, 422 hors plage/non declaree)
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -96,7 +208,7 @@ components:
     ErrorResponse:
       type: object
       properties:
-        error: { type: string, enum: [INVALID_SCHEMA, UNAUTHORIZED, DEVICE_NOT_TRUSTED, OUT_OF_RANGE] }
+        error: { type: string, enum: [INVALID_SCHEMA, INVALID_TD, UNAUTHORIZED, DEVICE_NOT_TRUSTED, NOT_FOUND, INVALID_STATE, OUT_OF_RANGE, UNDECLARED_PROPERTY] }
         message: { type: string }
     Measurement:
       type: object
@@ -122,3 +234,59 @@ components:
         gatewayId: { type: string }
         status: { type: string, enum: [pending, active, rejected, offline] }
         lastSeenAt: { type: string, format: date-time }
+        thingId: { type: string, example: 'urn:museum:device:bme280-01' }
+    ThingAnnouncement:
+      type: object
+      required: [deviceId, zoneId, td]
+      properties:
+        deviceId: { type: string }
+        zoneId: { type: string }
+        gatewayId: { type: string }
+        type: { type: string, example: bme280 }
+        td: { $ref: '#/components/schemas/ThingDescription' }
+    AnnouncementResult:
+      type: object
+      properties:
+        status: { type: string, enum: [registered, updated] }
+        deviceId: { type: string }
+        deviceStatus: { type: string, enum: [pending, active, offline] }
+    ThingDescription:
+      description: W3C WoT Thing Description 1.1 (JSON-LD 1.1). L'id doit se terminer par ":{deviceId}".
+      type: object
+      required: ['@context', id, title, securityDefinitions, security]
+      additionalProperties: true
+      properties:
+        '@context':
+          description: https://www.w3.org/2022/wot/td/v1.1, ou un tableau qui commence par cette URI
+          oneOf:
+            - { type: string }
+            - { type: array, items: {} }
+        '@type': { type: string }
+        id: { type: string, format: uri, example: 'urn:museum:device:bme280-01' }
+        title: { type: string }
+        securityDefinitions: { type: object, additionalProperties: { type: object, required: [scheme] } }
+        security:
+          oneOf:
+            - { type: string }
+            - { type: array, items: { type: string } }
+        properties: { type: object, additionalProperties: { $ref: '#/components/schemas/InteractionAffordance' } }
+        actions: { type: object, additionalProperties: { $ref: '#/components/schemas/InteractionAffordance' } }
+        events: { type: object, additionalProperties: { $ref: '#/components/schemas/InteractionAffordance' } }
+    InteractionAffordance:
+      type: object
+      required: [forms]
+      additionalProperties: true
+      properties:
+        title: { type: string }
+        type: { type: string }
+        unit: { type: string }
+        forms:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [href]
+            properties:
+              href: { type: string, example: 'mqtt://localhost:1883/museum/v1/salle-01/bme280-01/telemetry' }
+              op: { type: array, items: { type: string } }
+              contentType: { type: string }

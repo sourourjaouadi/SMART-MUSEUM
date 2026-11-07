@@ -12,7 +12,7 @@ import tn.supcom.museum.repository.MeasurementRepository;
 
 import java.time.Instant;
 
-/** Maillon 5 : persistance idempotente (B4). Un doublon n'est pas reecrit. */
+/** Maillon 6 : persistance idempotente (B4). Un doublon n'est pas reecrit. */
 public class PersistHandler extends ValidationHandler {
 
     private final MeasurementRepository measurements;

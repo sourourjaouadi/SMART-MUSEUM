@@ -8,7 +8,7 @@ package tn.supcom.museum.validation;
 
 import tn.supcom.museum.model.Measurement;
 
-/** Patron Chain of Responsibility : schema -> identite -> plage/qualite -> confiance -> persistance. */
+/** Patron Chain of Responsibility : schema -> identite -> plage/qualite -> confiance -> affordance WoT -> persistance. */
 public abstract class ValidationHandler {
 
     public enum Outcome { ACCEPTED, DUPLICATE }

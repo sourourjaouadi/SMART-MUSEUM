@@ -1,9 +1,3 @@
-/*
- * Module  : ApiException
- * Auteur  : P2 (Backend)
- * Date    : 2026-11-02
- * Version : 1.0
- */
 package tn.supcom.museum.error;
 
 public class ApiException extends RuntimeException {
@@ -39,5 +33,21 @@ public class ApiException extends RuntimeException {
 
     public static ApiException unprocessable(String msg) {
         return new ApiException(422, "OUT_OF_RANGE", msg);
+    }
+
+    public static ApiException invalidThingDescription(String msg) {
+        return new ApiException(400, "INVALID_TD", msg);
+    }
+
+    public static ApiException undeclaredProperty(String msg) {
+        return new ApiException(422, "UNDECLARED_PROPERTY", msg);
+    }
+
+    public static ApiException notFound(String msg) {
+        return new ApiException(404, "NOT_FOUND", msg);
+    }
+
+    public static ApiException conflict(String msg) {
+        return new ApiException(409, "INVALID_STATE", msg);
     }
 }

@@ -1,9 +1,4 @@
-/*
- * Module  : ApiExceptionMapper
- * Auteur  : P2 (Backend)
- * Date    : 2026-11-02
- * Version : 1.0
- */
+
 package tn.supcom.museum.error;
 
 import jakarta.ws.rs.core.MediaType;

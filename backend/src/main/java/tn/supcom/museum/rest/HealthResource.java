@@ -1,9 +1,3 @@
-/*
- * Module  : HealthResource
- * Auteur  : P2 (Backend)
- * Date    : 2026-11-02
- * Version : 1.0
- */
 package tn.supcom.museum.rest;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,20 +6,35 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
-import tn.supcom.museum.infra.MongoProvider;
+import tn.supcom.museum.data.DeviceData;
 
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Path("/health")
 @ApplicationScoped
 public class HealthResource {
 
+    private static final Logger LOG = Logger.getLogger(HealthResource.class.getName());
+
     @Inject
-    MongoProvider mongo;
+    DeviceData devices;
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Map<String, String> health() {
-        return Map.of("status", "UP", "mongo", mongo.ping() ? "UP" : "DOWN");
+        return Map.of("status", "UP", "mongo", ping() ? "UP" : "DOWN");
+    }
+
+    /** Une lecture par identifiant via Jakarta Data suffit a verifier que MongoDB repond. */
+    private boolean ping() {
+        try {
+            devices.findById("__health__");
+            return true;
+        } catch (RuntimeException e) {
+            LOG.log(Level.FINE, "MongoDB injoignable", e);
+            return false;
+        }
     }
 }

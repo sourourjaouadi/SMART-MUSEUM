@@ -18,10 +18,10 @@ import java.util.regex.Pattern;
 /** Maillon 1 : structure et types du message (400). */
 public class SchemaHandler extends ValidationHandler {
 
-    static final Set<String> PROPERTIES = Set.of("temperature", "humidity", "pressure", "illuminance");
+    public static final Set<String> PROPERTIES = Set.of("temperature", "humidity", "pressure", "illuminance");
     static final Set<String> SOURCES = Set.of("real", "simulated");
     static final Set<String> QUALITIES = Set.of("good", "uncertain", "bad");
-    private static final Pattern ID = Pattern.compile("^[A-Za-z0-9._-]{1,64}$");
+    public static final Pattern ID =Pattern.compile("^[A-Za-z0-9._-]{1,64}$");
 
     @Override
     public Outcome handle(Measurement m) {
