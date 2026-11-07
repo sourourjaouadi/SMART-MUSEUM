@@ -1,0 +1,26 @@
+# Copier vers config.yaml (ignoré par Git) ou /etc/smart-museum/config.yaml.
+# AUCUN secret ici : identifiants MQTT par variables d'environnement
+# (MQTT_USERNAME, MQTT_PASSWORD), voir agent.env.example.
+gateway:
+  id: gw-01
+  zone_id: salle-01
+  device_id: bme280-01
+
+sensor:
+  type: bme280            # bme280 (réel) | simulated
+  i2c_bus: 1
+  i2c_address: 0x76       # 0x77 si SDO relié à 3,3 V
+  interval_seconds: 10
+
+mqtt:
+  host: localhost         # IP ou nom du broker Mosquitto
+  port: 1883              # 8883 + tls.enabled: true en déploiement cloud (S6)
+  keepalive: 30
+  qos: 1
+  topic_prefix: museum/v1
+  tls:
+    enabled: false
+    ca_certs: null
+
+logging:
+  level: INFO
