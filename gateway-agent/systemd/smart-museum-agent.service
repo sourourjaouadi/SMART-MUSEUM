@@ -1,0 +1,30 @@
+# Service systemd de l'agent passerelle (tâche A5).
+# Installation : voir README.md, section « Service systemd ».
+[Unit]
+Description=Smart Museum - agent passerelle (BME280 vers MQTT)
+Documentation=file:///opt/smart-museum/gateway-agent/README.md
+# Attendre le réseau ET l'heure : un horodatage faux fait refuser les mesures (422).
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=smartmuseum
+Group=smartmuseum
+SupplementaryGroups=i2c
+WorkingDirectory=/opt/smart-museum/gateway-agent
+EnvironmentFile=/etc/smart-museum/agent.env
+ExecStart=/opt/smart-museum/gateway-agent/.venv/bin/python -m gateway_agent --config /etc/smart-museum/config.yaml
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+# Durcissement léger
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
