@@ -31,6 +31,10 @@ public class ApiException extends RuntimeException {
         return new ApiException(403, "DEVICE_NOT_TRUSTED", msg);
     }
 
+    public static ApiException accessDenied(String msg) {
+        return new ApiException(403, "FORBIDDEN", msg);
+    }
+
     public static ApiException unprocessable(String msg) {
         return new ApiException(422, "OUT_OF_RANGE", msg);
     }

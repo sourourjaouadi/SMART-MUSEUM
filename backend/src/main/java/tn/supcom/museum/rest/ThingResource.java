@@ -12,11 +12,15 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Link;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
 import tn.supcom.museum.error.ApiException;
 import tn.supcom.museum.model.ThingAnnouncement;
+import tn.supcom.museum.model.AuthenticatedUser;
 import tn.supcom.museum.repository.ThingRepository;
 import tn.supcom.museum.security.ServiceTokenRequired;
+import tn.supcom.museum.security.AuthorizationService;
+import tn.supcom.museum.security.UserAuthenticated;
 import tn.supcom.museum.validation.SchemaHandler;
 import tn.supcom.museum.wot.DiscoveryService;
 
@@ -38,6 +42,8 @@ public class ThingResource {
     DiscoveryService discovery;
     @Inject
     ThingRepository things;
+    @Inject
+    AuthorizationService authorization;
 
     @POST
     @ServiceTokenRequired
@@ -55,16 +61,21 @@ public class ThingResource {
     }
 
     @GET
+    @UserAuthenticated
     @Produces({TD_MEDIA_TYPE, MediaType.APPLICATION_JSON})
-    public Response list() {
+    public Response list(@jakarta.ws.rs.core.Context SecurityContext security) {
+        authorization.requireAdmin(currentUser(security));
         String body = "[" + String.join(",", things.findAllJson()) + "]";
         return Response.ok(body, MediaType.APPLICATION_JSON).build();
     }
 
     @GET
+    @UserAuthenticated
     @Path("/{deviceId}")
     @Produces({TD_MEDIA_TYPE, MediaType.APPLICATION_JSON})
-    public Response get(@PathParam("deviceId") String deviceId, @Context UriInfo uri) {
+    public Response get(@PathParam("deviceId") String deviceId, @Context UriInfo uri,
+                        @jakarta.ws.rs.core.Context SecurityContext security) {
+        authorization.requireAdmin(currentUser(security));
         if (!SchemaHandler.ID.matcher(deviceId).matches()) throw ApiException.badRequest("Identifiant invalide : deviceId");
         String td = things.findJson(deviceId)
                 .orElseThrow(() -> ApiException.notFound("Aucune Thing Description pour " + deviceId));
@@ -72,6 +83,10 @@ public class ThingResource {
         return Response.ok(td, TD_MEDIA_TYPE)
                 .links(Link.fromUri(device).rel("describes").type(MediaType.APPLICATION_JSON).build())
                 .build();
+    }
+
+    private static AuthenticatedUser currentUser(SecurityContext security) {
+        return (AuthenticatedUser) security.getUserPrincipal();
     }
 
     static URI tdUri(UriInfo uri, String deviceId) {

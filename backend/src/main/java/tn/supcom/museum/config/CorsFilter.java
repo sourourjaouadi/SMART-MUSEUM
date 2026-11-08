@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 public class CorsFilter implements ContainerRequestFilter, ContainerResponseFilter {
 
     private final Set<String> allowed = Arrays
-            .stream(Env.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(","))
+            .stream(Env.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174").split(","))
             .map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
 
     @Override
@@ -36,7 +36,7 @@ public class CorsFilter implements ContainerRequestFilter, ContainerResponseFilt
             var h = res.getHeaders();
             h.putSingle("Access-Control-Allow-Origin", origin);
             h.putSingle("Vary", "Origin");
-            h.putSingle("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Service-Token, X-Admin-Token");
+            h.putSingle("Access-Control-Allow-Headers", "Content-Type, Authorization");
             h.putSingle("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
             h.putSingle("Access-Control-Expose-Headers", "Link, Location");
             h.putSingle("Access-Control-Max-Age", "3600");

@@ -5,11 +5,50 @@ info:
   description: |
     Contrat v1.2. Un doublon de measurementId renvoie 200 (idempotence), pas 409.
     v1.2 : Thing Descriptions W3C WoT 1.1 (JSON-LD 1.1) et decouverte pending -> active.
-    Lecture ouverte en dev ; authentification ADMIN/CLIENT ajoutee en S3-S4
-    (jeton X-Admin-Token provisoire pour l'approbation des appareils).
+    Authentification humaine par JWT Bearer. Les rôles et zones autorisés sont
+    relus dans le compte MongoDB à chaque requête protégée. Les jetons de service
+    restent réservés aux intégrations serveur. Le serveur exige
+    JWT_SIGNING_KEY_BASE64 (au moins 32 aléatoires octets avant encodage Base64),
+    accepte une durée configurée entre 60 et 3600 secondes (900 par défaut), et
+    valide l'issuer configuré par JWT_ISSUER (smart-museum par défaut).
 servers:
   - url: http://localhost:8080
 paths:
+  /api/auth/login:
+    post:
+      summary: Authentifier un compte actif
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Jeton d'accès de courte durée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/users:
+    post:
+      summary: ADMIN - créer un compte CLIENT avec ses zones autorisées
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientProvisionRequest' }
+      responses:
+        '201':
+          description: Compte CLIENT créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserAccount' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /api/health:
     get:
       summary: Etat du service et de MongoDB
@@ -46,6 +85,7 @@ paths:
   /api/devices:
     get:
       summary: Liste des appareils
+      security: [{ bearerAuth: [] }]
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [pending, active, rejected, offline] } }
       responses:
@@ -57,9 +97,12 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Device' }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /api/devices/{deviceId}:
     get:
       summary: Detail d'un appareil
+      security: [{ bearerAuth: [] }]
       parameters:
         - { $ref: '#/components/parameters/DeviceId' }
       responses:
@@ -73,10 +116,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Device' }
         '404': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /api/devices/{deviceId}/approve:
     post:
       summary: ADMIN - approuver un appareil decouvert (pending -> active)
-      security: [{ adminToken: [] }]
+      security: [{ bearerAuth: [] }]
       parameters:
         - { $ref: '#/components/parameters/DeviceId' }
       responses:
@@ -86,12 +131,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Device' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
   /api/devices/{deviceId}/reject:
     post:
       summary: ADMIN - rejeter un appareil (ses mesures seront refusees)
-      security: [{ adminToken: [] }]
+      security: [{ bearerAuth: [] }]
       parameters:
         - { $ref: '#/components/parameters/DeviceId' }
       responses:
@@ -101,6 +147,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Device' }
         '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
   /api/things:
     post:
@@ -129,7 +176,8 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
     get:
-      summary: Toutes les Thing Descriptions
+      summary: ADMIN - toutes les Thing Descriptions
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
           description: OK
@@ -138,9 +186,12 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/ThingDescription' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /api/things/{deviceId}:
     get:
       summary: Thing Description W3C WoT 1.1 d'un appareil
+      security: [{ bearerAuth: [] }]
       parameters:
         - { $ref: '#/components/parameters/DeviceId' }
       responses:
@@ -150,9 +201,12 @@ paths:
             application/td+json:
               schema: { $ref: '#/components/schemas/ThingDescription' }
         '404': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /api/measurements/latest:
     get:
       summary: Derniere mesure de chaque propriete pour une zone
+      security: [{ bearerAuth: [] }]
       parameters:
         - { name: zoneId, in: query, required: true, schema: { type: string } }
       responses:
@@ -164,9 +218,12 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Measurement' }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /api/measurements:
     get:
       summary: Historique
+      security: [{ bearerAuth: [] }]
       parameters:
         - { name: deviceId, in: query, required: true, schema: { type: string } }
         - { name: property, in: query, required: true, schema: { type: string } }
@@ -182,16 +239,18 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/Measurement' }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
     serviceToken:
       type: apiKey
       in: header
       name: X-Service-Token
-    adminToken:
-      type: apiKey
-      in: header
-      name: X-Admin-Token
   parameters:
     DeviceId:
       name: deviceId
@@ -200,7 +259,7 @@ components:
       schema: { type: string, pattern: '^[A-Za-z0-9._-]{1,64}$' }
   responses:
     Error:
-      description: Erreur (400 schema/TD, 401 jeton, 403 appareil inconnu/non fiable/rejete, 404 introuvable, 409 etat invalide, 422 hors plage/non declaree)
+      description: Erreur JSON {error,message}; 400 validation, 401 authentification, 403 autorisation ou appareil non fiable, 404 ressource absente, 409 conflit, 422 plage/propriete
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -208,8 +267,44 @@ components:
     ErrorResponse:
       type: object
       properties:
-        error: { type: string, enum: [INVALID_SCHEMA, INVALID_TD, UNAUTHORIZED, DEVICE_NOT_TRUSTED, NOT_FOUND, INVALID_STATE, OUT_OF_RANGE, UNDECLARED_PROPERTY] }
+        error: { type: string, enum: [INVALID_SCHEMA, INVALID_TD, UNAUTHORIZED, FORBIDDEN, DEVICE_NOT_TRUSTED, NOT_FOUND, INVALID_STATE, OUT_OF_RANGE, UNDECLARED_PROPERTY, INTERNAL_ERROR] }
         message: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 72, writeOnly: true }
+    LoginResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken: { type: string, description: Short-lived signed access token; default lifetime 900 seconds }
+        tokenType: { type: string, enum: [Bearer] }
+        expiresIn: { type: integer, minimum: 60, maximum: 3600, description: Token lifetime in seconds }
+        user: { $ref: '#/components/schemas/UserAccount' }
+    ClientProvisionRequest:
+      type: object
+      required: [name, email, password, zoneIds]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 12, maxLength: 72, writeOnly: true, description: Maximum 72 UTF-8 bytes for BCrypt }
+        zoneIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Empty assignment grants no zone access.
+    UserAccount:
+      type: object
+      required: [userId, name, email, role, status, zoneIds]
+      properties:
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [ADMIN, CLIENT] }
+        status: { type: string, enum: [active, disabled] }
+        zoneIds: { type: array, items: { type: string } }
     Measurement:
       type: object
       required: [measurementId, deviceId, zoneId, property, value, unit, observedAt, source]

@@ -14,27 +14,38 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.SecurityContext;
 import tn.supcom.museum.error.ApiException;
+import tn.supcom.museum.model.AuthenticatedUser;
 import tn.supcom.museum.model.Measurement;
+import tn.supcom.museum.repository.DeviceRepository;
 import tn.supcom.museum.repository.MeasurementRepository;
+import tn.supcom.museum.security.AuthorizationService;
+import tn.supcom.museum.security.UserAuthenticated;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 
-/** TODO S3/S4 : proteger par authentification et RBAC par zone (lecture ouverte en dev uniquement). */
 @Path("/measurements")
 @ApplicationScoped
 @Produces(MediaType.APPLICATION_JSON)
+@UserAuthenticated
 public class MeasurementResource {
 
     @Inject
     MeasurementRepository measurements;
+    @Inject
+    DeviceRepository devices;
+    @Inject
+    AuthorizationService authorization;
 
     @GET
     @Path("/latest")
-    public List<Measurement> latest(@QueryParam("zoneId") String zoneId) {
+    public List<Measurement> latest(@QueryParam("zoneId") String zoneId,
+                                    @jakarta.ws.rs.core.Context SecurityContext security) {
         if (zoneId == null || zoneId.isBlank()) throw ApiException.badRequest("zoneId obligatoire");
+        authorization.requireZone(currentUser(security), zoneId);
         return measurements.findLatest(zoneId);
     }
 
@@ -43,11 +54,19 @@ public class MeasurementResource {
                                      @QueryParam("property") String property,
                                      @QueryParam("from") String from,
                                      @QueryParam("to") String to,
-                                     @QueryParam("limit") @DefaultValue("1000") int limit) {
+                                     @QueryParam("limit") @DefaultValue("1000") int limit,
+                                     @jakarta.ws.rs.core.Context SecurityContext security) {
         if (deviceId == null || deviceId.isBlank() || property == null || property.isBlank())
             throw ApiException.badRequest("deviceId et property obligatoires");
+        var device = devices.findById(deviceId)
+                .orElseThrow(() -> ApiException.notFound("Appareil inconnu : " + deviceId));
+        authorization.requireZone(currentUser(security), device.zoneId);
         int capped = Math.max(1, Math.min(limit, 5000));
         return measurements.findHistory(deviceId, property, parse(from, "from"), parse(to, "to"), capped);
+    }
+
+    private static AuthenticatedUser currentUser(SecurityContext security) {
+        return (AuthenticatedUser) security.getUserPrincipal();
     }
 
     private static Instant parse(String s, String name) {
