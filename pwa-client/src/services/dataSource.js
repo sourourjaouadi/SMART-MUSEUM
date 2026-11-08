@@ -11,7 +11,7 @@ export const DATA_MODES = Object.freeze({
 });
 
 export const DEFAULT_DATA_MODE =
-  import.meta.env?.VITE_DATA_MODE === DATA_MODES.API
+  (import.meta.env?.VITE_DATA_MODE ?? 'mock') === DATA_MODES.API
     ? DATA_MODES.API
     : DATA_MODES.MOCK;
 

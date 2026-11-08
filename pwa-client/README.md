@@ -22,12 +22,13 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Open the local URL printed by Vite. `.env.example` uses the documented local
-backend URL, `http://localhost:8080`, and selects `VITE_DATA_MODE=mock`.
-Keep that value for standalone demonstration mode; set it to `api` to make
-the initial page load request backend data. The dashboard's Data source
-control also switches between mock and API mode while the app is running.
-Change `VITE_API_BASE_URL` in `.env` if the backend runs elsewhere.
+Open the local URL printed by Vite. `.env.example` uses
+`VITE_API_BASE_URL=http://localhost:8080` and `VITE_DATA_MODE=mock`.
+Keep `mock` for standalone demonstration mode; the existing fixture data stays
+available without a running backend. Set `VITE_DATA_MODE=api` to start at the
+login page and load live data after a successful sign-in. Alternatively,
+select **Live API** from the dashboard; if there is no session, the app opens
+sign-in. Change `VITE_API_BASE_URL` in `.env` when the backend runs elsewhere.
 `VITE_API_TIMEOUT_MS` controls the API request timeout (10 seconds by
 default). `VITE_REFRESH_INTERVAL_MS` controls automatic refresh and defaults
 to 15000 (15 seconds); accepted values range from 10000 to 30000 milliseconds.
@@ -45,17 +46,39 @@ Measurement transformations and optional-field presentation are centralized
 in `src/utils/measurementData.js`; unknown property names remain visible as
 their raw identifiers rather than being assigned an invented label or unit.
 
-Use the **Live API** control to request data from the backend. The API service
-supports these documented read-only endpoints:
+The login form calls `POST /api/auth/login` with `{ email, password }` and
+uses the returned `accessToken`, `tokenType`, `expiresIn`, and safe `user`
+view. The access token is held in browser `sessionStorage` only for this tab
+session, with an expiry timestamp derived from `expiresIn`; it is cleared on
+logout, expiry, or a protected `401`. There is no refresh-token endpoint, so
+the Client PWA asks the user to sign in again after expiry. The backend
+validates account status, signature, role, and the current zone assignments on
+protected requests. The browser does not define or grant zone access.
+
+The API service supports these backend endpoints:
 
 - `GET /api/health`
-- `GET /api/devices`
+- `GET /api/devices` and `GET /api/devices/{deviceId}`
 - `GET /api/measurements/latest?zoneId=...`
-- `GET /api/measurements` with the optional `deviceId`, `property`, `from`,
-  `to`, and `limit` query parameters
+- `GET /api/measurements?deviceId=...&property=...&from=...&to=...&limit=...`
 
-The backend is not included in this project yet. Live mode will display a
-request error until the API is running and accessible from the browser.
+The dashboard checks public health before each API data refresh; this only
+reports backend/Mongo availability. Device and measurement reads require the
+Bearer token and are what validate the signed-in account; the backend may
+return `403` when that account is not assigned to the requested zone. API
+errors are displayed without falling back to demo values. Ensure
+the backend `CORS_ALLOWED_ORIGINS` includes the exact Vite origin (normally
+`http://localhost:5173`); the backend permits the Authorization header.
+Vite variables are public browser configuration only. Never put service
+tokens, JWT signing keys, bootstrap credentials, or other server secrets in
+`.env` or frontend code.
+
+To use demo mode, keep `VITE_DATA_MODE=mock`, or choose **Continue with demo
+data** on sign-in. Demo mode uses only `src/services/mockData.js` and does not
+depend on backend availability. Select **Live API** when an active backend
+account is available. Logout clears the browser token; with `VITE_DATA_MODE=api`
+the app returns to sign-in, while a default demo-configured app returns to
+demo mode.
 
 ## Build and tests
 

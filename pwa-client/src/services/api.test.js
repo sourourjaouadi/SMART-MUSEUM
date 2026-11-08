@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiError, createApiClient } from './api.js';
+import { clearSession, getAccessToken, saveSession } from './authSession.js';
 
 function jsonResponse(payload, { status = 200, statusText = 'OK' } = {}) {
   return {
@@ -24,6 +25,96 @@ const validMeasurement = {
   observedAt: '2026-11-01T08:49:05Z',
   source: 'real',
 };
+
+function validLoginResponse(accessToken = 'test-jwt') {
+  return {
+    accessToken,
+    tokenType: 'Bearer',
+    expiresIn: 900,
+    user: {
+      userId: 'a4cd67bc-e1c7-43c8-9d8b-9058af504400',
+      name: 'Museum Client',
+      email: 'client@example.org',
+      role: 'CLIENT',
+      status: 'active',
+      zoneIds: ['salle-01'],
+    },
+  };
+}
+
+test('logs in using the backend DTO without attaching a prior bearer token', async () => {
+  clearSession();
+  let captured;
+  const client = createApiClient({
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return jsonResponse(validLoginResponse());
+    },
+  });
+
+  assert.deepEqual(await client.login('client@example.org', 'secret-password'), validLoginResponse());
+  assert.equal(new URL(captured.url).pathname, '/api/auth/login');
+  assert.equal(captured.options.method, 'POST');
+  assert.deepEqual(JSON.parse(captured.options.body), {
+    email: 'client@example.org',
+    password: 'secret-password',
+  });
+  assert.equal(captured.options.headers.Authorization, undefined);
+});
+
+test('attaches the saved bearer token to protected client endpoints', async () => {
+  clearSession();
+  saveSession(validLoginResponse('attached-jwt'));
+  const captured = [];
+  const client = createApiClient({
+    fetchImpl: async (url, options) => {
+      captured.push({ url, options });
+      return jsonResponse(url.includes('/measurements') ? [] : []);
+    },
+  });
+
+  await client.getDevices();
+  await client.getLatestMeasurements('salle-01');
+  await client.getMeasurements({ deviceId: 'bme280-01', property: 'temperature' });
+  assert.equal(captured.length, 3);
+  assert.ok(captured.every(({ options }) => options.headers.Authorization === 'Bearer attached-jwt'));
+  clearSession();
+});
+
+test('clears expired sessions on protected 401 and reports forbidden responses safely', async () => {
+  clearSession();
+  saveSession(validLoginResponse('expired-jwt'));
+  const expiredClient = createApiClient({
+    fetchImpl: async () => jsonResponse({ error: 'UNAUTHORIZED', message: 'expired' }, { status: 401 }),
+  });
+  await assert.rejects(expiredClient.getDevices(), (error) => {
+    assert.equal(error.status, 401);
+    assert.match(error.message, /expired/i);
+    return true;
+  });
+  assert.equal(getAccessToken(), null);
+
+  const forbiddenClient = createApiClient({
+    fetchImpl: async () => jsonResponse({ error: 'FORBIDDEN', message: 'details' }, { status: 403 }),
+  });
+  await assert.rejects(forbiddenClient.getLatestMeasurements('salle-02'), (error) => {
+    assert.equal(error.status, 403);
+    assert.match(error.message, /Access denied/);
+    assert.equal(error.message.includes('details'), false);
+    return true;
+  });
+  clearSession();
+});
+
+test('rejects invalid login credentials through the backend error status', async () => {
+  const client = createApiClient({
+    fetchImpl: async () => jsonResponse({ error: 'UNAUTHORIZED', message: 'Invalid email or password' }, { status: 401 }),
+  });
+  await assert.rejects(client.login('nobody@example.org', 'incorrect'), {
+    status: 401,
+    message: 'Email or password was not accepted.',
+  });
+});
 
 test('encodes the latest zone parameter and preserves the API measurement', async () => {
   let requestUrl;
@@ -81,16 +172,20 @@ test('retrieves health and device arrays without adding authentication headers',
       return jsonResponse(
         url.endsWith('/api/health')
           ? { status: 'UP', mongo: 'UP' }
-          : [],
+          : url.endsWith('/api/devices/device-1')
+            ? { deviceId: 'device-1', zoneId: 'salle-01' }
+            : [],
       );
     },
   });
 
   assert.deepEqual(await client.getHealth(), { status: 'UP', mongo: 'UP' });
   assert.deepEqual(await client.getDevices(), []);
+  await client.getDevice('device-1');
   assert.deepEqual(requests.map(({ url }) => new URL(url).pathname), [
     '/api/health',
     '/api/devices',
+    '/api/devices/device-1',
   ]);
   assert.deepEqual(requests[0].options.headers, { Accept: 'application/json' });
   assert.equal(

@@ -19,6 +19,11 @@ const STATUS_CONTENT = {
     detail: 'Live data could not be loaded. Check the API URL and try again.',
     className: 'status-message--error',
   },
+  forbidden: {
+    label: 'Access to this zone is denied',
+    detail: 'Your account is not assigned to this zone. Contact a museum administrator if you need access.',
+    className: 'status-message--error',
+  },
   unavailable: {
     label: 'Measurement data unavailable',
     detail: 'A device is not registered for this zone or a reading timestamp is invalid.',
@@ -47,8 +52,8 @@ export default function StatusMessage({ status, error, errorCode, isDemo }) {
   return (
     <div
       className={`status-message ${content.className}`}
-      role={status === 'error' ? 'alert' : 'status'}
-      aria-live={status === 'error' ? 'assertive' : 'polite'}
+      role={status === 'error' || status === 'forbidden' ? 'alert' : 'status'}
+      aria-live={status === 'error' || status === 'forbidden' ? 'assertive' : 'polite'}
     >
       <span className="status-message__dot" aria-hidden="true" />
       <div className="status-message__copy">

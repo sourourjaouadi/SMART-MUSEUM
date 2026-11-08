@@ -14,6 +14,7 @@ import {
   getZoneData,
 } from '../services/dataSource.js';
 import { createRefreshScheduler } from '../services/refreshScheduler.js';
+import { getHealth } from '../services/api.js';
 import { groupMeasurementsByProperty } from '../utils/measurementData.js';
 import {
   formatObservedAt,
@@ -36,14 +37,34 @@ const REFRESH_INTERVAL_MS = getRefreshIntervalMs(
   import.meta.env.VITE_REFRESH_INTERVAL_MS,
 );
 
-export default function ConservationDashboard() {
+export default function ConservationDashboard({
+  initialMode,
+  session = null,
+  onLoginRequested,
+  onLogout,
+} = {}) {
+  const effectiveInitialMode = initialMode ?? (session ? DATA_MODES.API : INITIAL_DATA_MODE);
   const [selectedZoneId, setSelectedZoneId] = useState(
-    INITIAL_DATA_MODE === DATA_MODES.API ? '' : getAvailableZones()[0]?.id ?? '',
+    effectiveInitialMode === DATA_MODES.API && session
+      ? session?.user?.zoneIds?.[0] ?? ''
+      : getAvailableZones()[0]?.id ?? '',
   );
-  const [dataMode, setDataMode] = useState(INITIAL_DATA_MODE);
+  const [dataMode, setDataMode] = useState(effectiveInitialMode);
   const [liveState, setLiveState] = useState(INITIAL_LIVE_STATE);
   const [now, setNow] = useState(() => Date.now());
   const isDemo = dataMode === DATA_MODES.MOCK;
+
+  useEffect(() => {
+    if (initialMode !== undefined) {
+      setDataMode(initialMode);
+      setLiveState(INITIAL_LIVE_STATE);
+      setSelectedZoneId(
+        initialMode === DATA_MODES.API
+          ? session?.user?.zoneIds?.[0] ?? ''
+          : getAvailableZones()[0]?.id ?? '',
+      );
+    }
+  }, [initialMode, session]);
   const zones = useMemo(
     () => getAvailableZones(isDemo ? undefined : liveState.devices),
     [isDemo, liveState.devices],
@@ -67,17 +88,31 @@ export default function ConservationDashboard() {
 
     const refresh = async () => {
       activeController = new AbortController();
-      setLiveState((previous) =>
-        previous.measurements.length === 0
-          ? { ...previous, status: 'loading', error: null, errorCode: null }
-          : previous,
-      );
+      setLiveState((previous) => ({
+        ...previous,
+        status: 'loading',
+        error: null,
+        errorCode: null,
+        httpStatus: null,
+      }));
 
       try {
-        const { devices, measurements } = await getZoneData(selectedZoneId, {
+        if (dataMode === DATA_MODES.API) {
+          const health = await getHealth({ signal: activeController.signal });
+          if (health?.status !== 'UP' || health?.mongo !== 'UP') {
+            throw new Error('Backend health check failed. Check the API and database status.');
+          }
+        }
+        const zoneToLoad = dataMode === DATA_MODES.API && !selectedZoneId && session
+          ? session.user?.zoneIds?.[0] ?? ''
+          : selectedZoneId;
+        const { devices, measurements } = await getZoneData(zoneToLoad, {
           mode: dataMode,
           signal: activeController.signal,
         });
+        if (active && zoneToLoad !== selectedZoneId) {
+          setSelectedZoneId(zoneToLoad);
+        }
         if (active) {
           setLiveState({
             status: 'success',
@@ -94,6 +129,7 @@ export default function ConservationDashboard() {
             status: 'error',
             error: error.message,
             errorCode: error.backendErrorCode ?? null,
+            httpStatus: error.status ?? null,
           }));
         }
       }
@@ -107,7 +143,7 @@ export default function ConservationDashboard() {
       scheduler.stop();
       activeController?.abort();
     };
-  }, [dataMode, selectedZoneId]);
+  }, [dataMode, selectedZoneId, session]);
 
   useEffect(() => {
     const timerId = window.setInterval(() => setNow(Date.now()), 5000);
@@ -127,8 +163,10 @@ export default function ConservationDashboard() {
   );
 
   const status =
-    liveState.status === 'loading' || liveState.status === 'error'
-      ? liveState.status
+    liveState.status === 'error' && liveState.httpStatus === 403
+      ? 'forbidden'
+      : liveState.status === 'loading' || liveState.status === 'error'
+        ? liveState.status
       : !selectedZoneId || zoneDevices.length === 0
         ? 'unavailable'
         : measurements.length === 0
@@ -159,6 +197,11 @@ export default function ConservationDashboard() {
           </div>
           <div className="topbar__status-group">
             <PwaControls />
+            {session && (
+              <button className="session-action" type="button" onClick={onLogout}>
+                Sign out
+              </button>
+            )}
             <div
               className={`connection-status connection-status--${isDemo ? 'demo' : liveState.status}`}
               role="status"
@@ -225,6 +268,10 @@ export default function ConservationDashboard() {
                   value={DATA_MODES.API}
                   checked={!isDemo}
                   onChange={() => {
+                    if (!session && onLoginRequested) {
+                      onLoginRequested();
+                      return;
+                    }
                     setLiveState(INITIAL_LIVE_STATE);
                     setSelectedZoneId('');
                     setDataMode(DATA_MODES.API);

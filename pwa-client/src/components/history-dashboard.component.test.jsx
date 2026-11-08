@@ -10,11 +10,18 @@ vi.mock('../services/dataSource.js', async (importOriginal) => ({
   getZoneData: vi.fn(),
 }));
 
+vi.mock('../services/api.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getHealth: vi.fn().mockResolvedValue({ status: 'UP', mongo: 'UP' }),
+}));
+
 import { DATA_MODES, getZoneData } from '../services/dataSource.js';
+import { getHealth } from '../services/api.js';
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  getHealth.mockResolvedValue({ status: 'UP', mongo: 'UP' });
 });
 
 describe('HistoricalMeasurements', () => {
@@ -67,7 +74,7 @@ describe('ConservationDashboard', () => {
       ),
     }));
 
-    render(<ConservationDashboard />);
+    render(<ConservationDashboard initialMode={DATA_MODES.MOCK} />);
 
     expect(await screen.findByText('bme280-01')).toBeTruthy();
     expect(screen.getByText('19.4')).toBeTruthy();
@@ -91,7 +98,7 @@ describe('ConservationDashboard', () => {
       ),
     }));
 
-    render(<ConservationDashboard />);
+    render(<ConservationDashboard initialMode={DATA_MODES.MOCK} />);
 
     const apiMode = screen.getByRole('radio', { name: 'Live API' });
     fireEvent.click(apiMode);
@@ -140,7 +147,7 @@ describe('ConservationDashboard', () => {
         ),
     }));
 
-    render(<ConservationDashboard />);
+    render(<ConservationDashboard initialMode={DATA_MODES.MOCK} />);
     fireEvent.click(screen.getByRole('radio', { name: 'Live API' }));
 
     const zoneSelector = screen.getByLabelText('Monitoring zone');
@@ -162,7 +169,7 @@ describe('ConservationDashboard', () => {
 
   it('handles an empty API device list without retaining mock zones', async () => {
     getZoneData.mockResolvedValue({ devices: [], measurements: [] });
-    render(<ConservationDashboard />);
+    render(<ConservationDashboard initialMode={DATA_MODES.MOCK} />);
     fireEvent.click(screen.getByRole('radio', { name: 'Live API' }));
 
     await waitFor(() => {
@@ -186,5 +193,20 @@ describe('ConservationDashboard', () => {
 
     expect(await screen.findByText('Backend error code: INTERNAL_ERROR')).toBeTruthy();
     expect(screen.queryByText(/Sensitive server detail/)).toBeNull();
+  });
+
+  it('shows a clear zone authorization message for API 403 responses', async () => {
+    const forbidden = Object.assign(new Error('Access denied'), { status: 403 });
+    getZoneData.mockRejectedValue(forbidden);
+    render(<ConservationDashboard initialMode={DATA_MODES.API} />);
+    expect(await screen.findByText('Access to this zone is denied')).toBeTruthy();
+    expect(screen.getByText(/not assigned to this zone/i)).toBeTruthy();
+  });
+
+  it('shows backend health failures without requesting or substituting demo data', async () => {
+    getHealth.mockResolvedValue({ status: 'UP', mongo: 'DOWN' });
+    render(<ConservationDashboard initialMode={DATA_MODES.API} />);
+    expect(await screen.findByText(/Backend health check failed/)).toBeTruthy();
+    expect(getZoneData).not.toHaveBeenCalled();
   });
 });

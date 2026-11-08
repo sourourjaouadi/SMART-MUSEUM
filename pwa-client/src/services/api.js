@@ -1,3 +1,5 @@
+import { clearSession, getAccessToken } from './authSession.js';
+
 const DEFAULT_API_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT_MS = 10_000;
 const VALID_SOURCES = new Set(['real', 'simulated']);
@@ -153,7 +155,13 @@ export function createApiClient({
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 
-  async function getJson(path, { signal } = {}) {
+  async function requestJson(path, {
+    signal,
+    method = 'GET',
+    body,
+    authenticated = path !== '/api/health',
+  } = {}) {
+    const accessToken = authenticated ? getAccessToken() : null;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort(new DOMException('The API request timed out.', 'TimeoutError'));
@@ -169,15 +177,19 @@ export function createApiClient({
     try {
       let response;
       try {
+        const headers = { Accept: 'application/json' };
+        if (body !== undefined) headers['Content-Type'] = 'application/json';
+        if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
         response = await fetchImpl(`${normalizedBaseUrl}${path}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
+          method,
+          headers,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           signal: controller.signal,
         });
       } catch (error) {
         if (controller.signal.aborted) {
           if (controller.signal.reason?.name === 'TimeoutError') {
-            throw new ApiError(`GET ${path} timed out after ${timeoutMs} ms.`, {
+            throw new ApiError(`${method} ${path} timed out after ${timeoutMs} ms.`, {
               code: 'TIMEOUT',
               cause: error,
             });
@@ -185,7 +197,7 @@ export function createApiClient({
           throw error;
         }
 
-        throw new ApiError(`GET ${path} failed because the API could not be reached.`, {
+        throw new ApiError(`${method} ${path} failed because the API could not be reached.`, {
           code: 'NETWORK_ERROR',
           cause: error,
         });
@@ -198,7 +210,7 @@ export function createApiClient({
         } catch (error) {
           if (controller.signal.aborted) {
             if (controller.signal.reason?.name === 'TimeoutError') {
-              throw new ApiError(`GET ${path} timed out after ${timeoutMs} ms.`, {
+              throw new ApiError(`${method} ${path} timed out after ${timeoutMs} ms.`, {
                 code: 'TIMEOUT',
                 cause: error,
               });
@@ -206,8 +218,18 @@ export function createApiClient({
             throw error;
           }
         }
+        if (response.status === 401 && authenticated) {
+          clearSession({ expired: true });
+        }
+        const safeMessage = response.status === 403
+          ? 'Access denied. Your account may not be assigned to this zone.'
+          : response.status === 401
+            ? authenticated
+              ? 'Your session is invalid or expired. Sign in again.'
+              : 'Email or password was not accepted.'
+            : `${method} ${path} failed with HTTP ${response.status}.`;
         throw new ApiError(
-          `GET ${path} failed with HTTP ${response.status}.`,
+          safeMessage,
           {
             code: 'HTTP_ERROR',
             status: response.status,
@@ -222,14 +244,14 @@ export function createApiClient({
       } catch (error) {
         if (controller.signal.aborted) {
           if (controller.signal.reason?.name === 'TimeoutError') {
-            throw new ApiError(`GET ${path} timed out after ${timeoutMs} ms.`, {
+            throw new ApiError(`${method} ${path} timed out after ${timeoutMs} ms.`, {
               code: 'TIMEOUT',
               cause: error,
             });
           }
           throw error;
         }
-        throw new ApiError(`GET ${path} response body could not be read.`, {
+        throw new ApiError(`${method} ${path} response body could not be read.`, {
           code: 'INVALID_RESPONSE',
           cause: error,
         });
@@ -238,7 +260,7 @@ export function createApiClient({
       try {
         return JSON.parse(responseText);
       } catch (error) {
-        throw new ApiError(`GET ${path} returned invalid JSON.`, {
+        throw new ApiError(`${method} ${path} returned invalid JSON.`, {
           code: 'INVALID_JSON',
           cause: error,
         });
@@ -249,13 +271,63 @@ export function createApiClient({
     }
   }
 
+  const getJson = (path, options) => requestJson(path, options);
+
   return {
+    async login(email, password, options = {}) {
+      if (typeof email !== 'string' || typeof password !== 'string') {
+        throw new TypeError('Email and password are required.');
+      }
+      const response = await requestJson('/api/auth/login', {
+        ...options,
+        method: 'POST',
+        body: { email, password },
+        authenticated: false,
+      });
+      if (
+        !response ||
+        typeof response.accessToken !== 'string' ||
+        response.tokenType !== 'Bearer' ||
+        !Number.isInteger(response.expiresIn) ||
+        response.expiresIn < 60 ||
+        response.expiresIn > 3600 ||
+        !response.user ||
+        typeof response.user.userId !== 'string' ||
+        typeof response.user.name !== 'string' ||
+        typeof response.user.email !== 'string' ||
+        !['ADMIN', 'CLIENT'].includes(response.user.role) ||
+        !['active', 'disabled'].includes(response.user.status) ||
+        !Array.isArray(response.user.zoneIds) ||
+        response.user.zoneIds.some((zoneId) => typeof zoneId !== 'string')
+      ) {
+        throw new ApiError('POST /api/auth/login returned an invalid response.', {
+          code: 'INVALID_RESPONSE',
+        });
+      }
+      return response;
+    },
+
     async getHealth(options) {
       return getJson('/api/health', options);
     },
 
     async getDevices(options) {
       return validateDevices(await getJson('/api/devices', options));
+    },
+
+    async getDevice(deviceId, options) {
+      if (typeof deviceId !== 'string' || deviceId.length === 0) {
+        throw new TypeError('deviceId must be a non-empty string.');
+      }
+      const path = `/api/devices/${encodeURIComponent(deviceId)}`;
+      const device = await getJson(path, options);
+      if (!Array.isArray(device) && device && typeof device === 'object') {
+        const validation = validateDevices([device]);
+        return validation[0];
+      }
+      throw new ApiError(`${path} returned an invalid device response.`, {
+        code: 'INVALID_RESPONSE',
+      });
     },
 
     async getLatestMeasurements(zoneId, options) {
@@ -302,7 +374,9 @@ export function createApiClient({
 const apiClient = createApiClient();
 
 export const getHealth = (...args) => apiClient.getHealth(...args);
+export const login = (...args) => apiClient.login(...args);
 export const getDevices = (...args) => apiClient.getDevices(...args);
+export const getDevice = (...args) => apiClient.getDevice(...args);
 export const getLatestMeasurements = (...args) =>
   apiClient.getLatestMeasurements(...args);
 export const getMeasurements = (...args) => apiClient.getMeasurements(...args);
