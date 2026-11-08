@@ -238,14 +238,6 @@ SMART-MUSEUM/
 
 *The structure above describes the principal project areas. Individual files and subdirectories may evolve during development.*
 
-The project is developed collaboratively, with each team member responsible for a specific system layer.
-
-| Member | Responsibility | Main deliverables |
-|---|---|---|
-| P1 – Yassmine | IoT and communication layer | Gateway, sensors, MQTT, Node-RED |
-| P2 – Sirine | Backend and database | Jakarta EE, MongoDB, REST API, API contract |
-| P3 – Frontend | Web application | React, Vite, PWA, dashboard, frontend integration |
-
 ### P1 – IoT Development
 
 Responsible for sensor integration, gateway configuration, MQTT communication, and Node-RED flows.
@@ -679,17 +671,7 @@ These are potential improvements and should not be considered implemented functi
 
 ---
 
-## 15. Contributors
 
-Smart Museum is a collaborative university project developed by three team members.
-
-| Role | Responsibility |
-|---|---|
-| P1 – Yassmine | IoT sensors, gateway, MQTT, and Node-RED |
-| P2 – Sirine | Jakarta EE backend, MongoDB, and REST API |
-| P3 – Frontend Developer | React, Vite, PWA, dashboard, and frontend integration |
-
----
 
 ## 16. Conclusion
 
