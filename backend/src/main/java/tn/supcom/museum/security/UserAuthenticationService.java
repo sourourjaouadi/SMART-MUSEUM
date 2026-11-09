@@ -27,6 +27,18 @@ public class UserAuthenticationService {
     @Inject
     AccessTokenService tokens;
 
+    private volatile String dummyHash;
+
+    /** Hash BCrypt d'un mot de passe aleatoire, calcule une seule fois, pour les emails inconnus. */
+    private String dummyHash() {
+        String h = dummyHash;
+        if (h == null) {
+            h = passwords.hash(UUID.randomUUID().toString());
+            dummyHash = h;
+        }
+        return h;
+    }
+
     public LoginResponse login(LoginRequest request) {
         if (request == null || request.email == null || request.password == null
                 || !EMAIL.matcher(request.email.trim()).matches()
@@ -34,8 +46,11 @@ public class UserAuthenticationService {
             throw ApiException.badRequest("Valid email and password are required");
         }
         UserEntity user = users.findByEmail(request.email).orElse(null);
-        if (user == null || !"active".equals(user.status)
-                || !passwords.verify(request.password, user.passwordHash)) {
+        // BCrypt tourne toujours, meme pour un email inconnu : le temps de reponse
+        // ne doit pas reveler quels emails ont un compte.
+        String hash = user != null ? user.passwordHash : dummyHash();
+        boolean passwordOk = passwords.verify(request.password, hash);
+        if (user == null || !"active".equals(user.status) || !passwordOk) {
             throw ApiException.unauthorized("Invalid email or password");
         }
         AccessTokenService.IssuedToken issued = tokens.issue(user.userId, user.role);
