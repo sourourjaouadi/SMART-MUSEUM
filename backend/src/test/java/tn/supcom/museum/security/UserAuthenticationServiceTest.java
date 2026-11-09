@@ -85,4 +85,23 @@ class UserAuthenticationServiceTest {
         request.email = "not-an-email";
         assertThrows(ApiException.class, () -> authentication.login(request));
     }
+
+    @Test
+    void unknownEmailStillRunsPasswordCheck() {
+        int[] verifyCalls = {0};
+        authentication.passwords = new PasswordHasher() {
+            @Override
+            public boolean verify(String password, String hash) {
+                verifyCalls[0]++;
+                return super.verify(password, hash);
+            }
+        };
+        LoginRequest request = new LoginRequest();
+        request.email = "nobody@museum.test";
+        request.password = "a-long-client-passphrase";
+
+        ApiException e = assertThrows(ApiException.class, () -> authentication.login(request));
+        assertEquals(401, e.getStatus());
+        assertEquals(1, verifyCalls[0], "BCrypt doit tourner meme si l'email n'existe pas");
+    }
 }
