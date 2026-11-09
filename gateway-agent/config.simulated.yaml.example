@@ -1,0 +1,23 @@
+# 2e zone SIMULÉE (tâche A8). Tout message issu de cette configuration est
+# étiqueté source = "simulated" par Node-RED (gatewayId commençant par gw-sim).
+gateway:
+  id: gw-sim
+  zone_id: salle-02
+  device_id: sim-bme280-02
+
+sensor:
+  type: simulated
+  interval_seconds: 10
+
+mqtt:
+  host: localhost
+  port: 1883
+  keepalive: 30
+  qos: 1
+  topic_prefix: museum/v1
+  tls:
+    enabled: false
+    ca_certs: null
+
+logging:
+  level: INFO
