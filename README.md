@@ -29,7 +29,7 @@ Smart Museum follows a layered IoT architecture composed of four main parts:
 
 1. **IoT Layer:** Environmental sensors and gateway devices collect environmental measurements.
 2. **Communication Layer:** MQTT transports sensor data, with Node-RED handling IoT message flows and integration.
-3. **Backend Layer:** A Jakarta EE application exposes REST APIs and manages device and measurement data stored in MongoDB.
+3. **Middleware Layer:** A Jakarta EE application exposes REST APIs and manages device and measurement data stored in MongoDB.
 4. **Presentation Layer:** A React-based Progressive Web Application displays environmental information to museum staff.
 
 ### High-level architecture
@@ -39,7 +39,7 @@ flowchart TD
     A["Environmental Sensors"] --> B["IoT Gateway"]
     B --> C["MQTT Broker"]
     C --> D["Node-RED"]
-    D --> E["Backend REST API"]
+    D --> E["Middleware REST API"]
     E --> F[("MongoDB")]
     F --> E
     E --> G["React + Vite PWA"]
@@ -52,7 +52,7 @@ flowchart TD
 2. The IoT gateway gathers sensor readings.
 3. MQTT transports the data to the communication infrastructure.
 4. Node-RED processes and forwards the incoming sensor messages.
-5. The backend receives the data through its ingestion interface.
+5. The middleware receives the data through its ingestion interface.
 6. Measurements and device information are stored in MongoDB.
 7. The REST API provides the stored information to the frontend.
 8. The PWA retrieves and displays the information through the dashboard.
@@ -67,14 +67,14 @@ flowchart TD
 | Sensor type | BME280 and supported environmental sensors | Measure environmental parameters |
 | Messaging | MQTT | IoT communication |
 | Flow integration | Node-RED | Process and route IoT messages |
-| Backend | Java, Jakarta EE | Application logic and REST services |
-| Backend build | Apache Maven | Dependency management and packaging |
-| Application server | WildFly | Backend deployment |
+| Middleware | Java, Jakarta EE | Application logic and REST services |
+| Middleware build | Apache Maven | Dependency management and packaging |
+| Application server | WildFly | Middleware deployment |
 | Database | MongoDB | Store devices and measurements |
 | Frontend | React | User interface |
 | Frontend tooling | Vite | Development and production builds |
 | Application type | Progressive Web App (PWA) | Installable and offline-capable experience |
-| API communication | REST / JSON | Frontend-backend integration |
+| API communication | REST / JSON | Frontend-middleware integration |
 | Version control | Git and GitHub | Collaborative development |
 
 ---
@@ -98,19 +98,19 @@ The system is designed to support monitoring multiple exhibition spaces independ
 
 ### 4.2 Communication Layer – MQTT and Node-RED
 
-The communication layer connects the IoT devices to the backend.
+The communication layer connects the IoT devices to the middleware.
 
 MQTT provides a lightweight messaging mechanism suitable for IoT environments. Node-RED provides a flow-based environment for handling and routing incoming messages.
 
 **Main responsibilities:**
 - Receive sensor messages.
 - Handle the IoT data flow.
-- Forward measurements to the backend ingestion service.
-- Support communication between the gateway and application backend.
+- Forward measurements to the middleware ingestion service.
+- Support communication between the gateway and application middleware.
 
-### 4.3 Backend Layer – Jakarta EE
+### 4.3 Middleware Layer – Jakarta EE
 
-The backend is implemented in Java using Jakarta EE and deployed on WildFly.
+The middleware is implemented in Java using Jakarta EE and deployed on WildFly.
 
 It exposes REST endpoints that allow the frontend to retrieve device information, environmental measurements, and application health information.
 
@@ -158,7 +158,7 @@ It provides a centralized interface through which museum staff can monitor the e
 - Service-worker support and update handling.
 - Mock-data mode for frontend development and demonstration.
 
-The frontend communicates with the backend through REST APIs and does not directly access MongoDB or the protected ingestion service.
+The frontend communicates with the middleware through REST APIs and does not directly access MongoDB or the protected ingestion service.
 
 ---
 
@@ -193,7 +193,7 @@ The PWA includes service-worker functionality, installation support, and offline
 The frontend supports two data modes:
 
 - **Mock mode:** Uses demonstration data for development and testing.
-- **API mode:** Retrieves information from the deployed backend.
+- **API mode:** Retrieves information from the deployed middleware.
 
 This allows frontend development to continue even when the IoT infrastructure is not available.
 
@@ -212,8 +212,8 @@ SMART-MUSEUM/
 ├── node-red/
 │   └── MQTT and Node-RED communication flows
 │
-├── backend/
-│   └── Jakarta EE backend application
+├── middleware/
+│   └── Jakarta EE middleware application
 │       ├── src/
 │       ├── pom.xml
 │       ├── docker-compose.dev.yml
@@ -242,9 +242,9 @@ SMART-MUSEUM/
 
 Responsible for sensor integration, gateway configuration, MQTT communication, and Node-RED flows.
 
-### P2 – Backend Development
+### P2 – Middleware Development
 
-Responsible for backend implementation, database persistence, REST API development, and API documentation.
+Responsible for middleware implementation, database persistence, REST API development, and API documentation.
 
 ### P3 – Frontend Development
 
@@ -252,15 +252,15 @@ Responsible for the user-facing application, environmental monitoring dashboard,
 
 ---
 
-## 8. Backend API
+## 8. Middleware API
 
-The backend exposes REST endpoints under the `/api` base path.
+The middleware exposes REST endpoints under the `/api` base path.
 
 ### Available endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/health` | Check backend and database health |
+| GET | `/api/health` | Check middleware and database health |
 | GET | `/api/devices` | Retrieve registered devices |
 | GET | `/api/measurements/latest?zoneId={zoneId}` | Retrieve latest measurements for a zone |
 | GET | `/api/measurements?deviceId={id}&property={property}&from={date}&to={date}&limit={number}` | Retrieve historical measurements |
@@ -329,7 +329,7 @@ Example:
 GET /api/measurements?deviceId=bme280-01&property=temperature&limit=50
 ```
 
-The exact accepted date formats and optional parameters should follow the backend API contract.
+The exact accepted date formats and optional parameters should follow the middleware API contract.
 
 ### Ingestion security
 
@@ -363,7 +363,7 @@ cd SMART-MUSEUM
 
 ### Step 2 – Select the integration branch
 
-The integration branch used for backend and frontend testing is:
+The integration branch used for middleware and frontend testing is:
 
 ```bash
 git switch integration/p3-p2-test
@@ -377,10 +377,10 @@ git switch main
 
 ### Step 3 – Start MongoDB
 
-Open a terminal in the backend directory:
+Open a terminal in the middleware directory:
 
 ```bash
-cd backend
+cd middleware
 docker compose -f docker-compose.dev.yml up -d
 ```
 
@@ -390,21 +390,21 @@ Verify that the MongoDB container is running:
 docker ps
 ```
 
-### Step 4 – Build the backend
+### Step 4 – Build the middleware
 
-From the `backend/` directory, execute:
+From the `middleware/` directory, execute:
 
 ```bash
 mvn clean package
 ```
 
-The build generates the backend WAR file under:
+The build generates the middleware WAR file under:
 
 ```text
-backend/target/smart-museum.war
+middleware/target/smart-museum.war
 ```
 
-### Step 5 – Deploy the backend on WildFly
+### Step 5 – Deploy the middleware on WildFly
 
 Copy the generated WAR file into the WildFly deployments directory.
 
@@ -430,9 +430,9 @@ standalone.bat
 
 Wait for the application to deploy successfully.
 
-### Step 6 – Verify the backend
+### Step 6 – Verify the middleware
 
-Check the backend health:
+Check the middleware health:
 
 ```bash
 curl http://localhost:8080/api/health
@@ -444,7 +444,7 @@ Retrieve the registered devices:
 curl http://localhost:8080/api/devices
 ```
 
-The backend should be available at:
+The middleware should be available at:
 
 ```text
 http://localhost:8080
@@ -508,7 +508,7 @@ The PWA supports configurable API communication and development modes.
 
 | Variable | Description | Example |
 |---|---|---|
-| `VITE_API_BASE_URL` | Backend API base URL | `http://localhost:8080` |
+| `VITE_API_BASE_URL` | Middleware API base URL | `http://localhost:8080` |
 | `VITE_STALE_AFTER_MS` | Measurement freshness threshold | `900000` |
 | `VITE_DATA_MODE` | Data source mode | `api` or `mock` |
 | `VITE_API_TIMEOUT_MS` | API request timeout | `10000` |
@@ -516,13 +516,13 @@ The PWA supports configurable API communication and development modes.
 
 The `.env.example` file provides the default configuration template.
 
-For local frontend development without a running backend, use:
+For local frontend development without a running middleware, use:
 
 ```env
 VITE_DATA_MODE=mock
 ```
 
-For backend integration testing, use:
+For middleware integration testing, use:
 
 ```env
 VITE_DATA_MODE=api
@@ -557,9 +557,9 @@ npm test
 npm run build
 ```
 
-### Backend testing
+### Middleware testing
 
-The backend can be built and validated using Maven:
+The middleware can be built and validated using Maven:
 
 ```bash
 mvn clean package
@@ -598,15 +598,15 @@ db.measurements.countDocuments()
 The P2/P3 integration process verifies:
 
 1. MongoDB starts correctly.
-2. The backend builds successfully.
-3. WildFly deploys the backend application.
-4. The health endpoint reports backend and database availability.
+2. The middleware builds successfully.
+3. WildFly deploys the middleware application.
+4. The health endpoint reports middleware and database availability.
 5. The devices endpoint returns registered devices.
 6. The frontend loads in API mode.
-7. The frontend communicates with the backend.
+7. The frontend communicates with the middleware.
 8. Actual measurements are retrieved and displayed when the IoT ingestion pipeline is active.
 
-A successful backend health check does not by itself prove that the complete IoT ingestion pipeline is working. End-to-end validation also requires sensor measurements to reach the backend and be stored in MongoDB.
+A successful middleware health check does not by itself prove that the complete IoT ingestion pipeline is working. End-to-end validation also requires sensor measurements to reach the middleware and be stored in MongoDB.
 
 ---
 
@@ -614,10 +614,10 @@ A successful backend health check does not by itself prove that the complete IoT
 
 The system separates device ingestion from frontend data retrieval.
 
-- The frontend communicates with the backend through REST APIs.
+- The frontend communicates with the middleware through REST APIs.
 - The ingestion service uses a protected service token.
 - The service token must remain on trusted server-side components.
-- CORS configuration controls which frontend origins can communicate with the backend.
+- CORS configuration controls which frontend origins can communicate with the middleware.
 - MongoDB provides persistent storage for device and measurement information.
 - The frontend includes loading, error, empty, and offline interface states.
 - The PWA service worker supports offline-related application behavior.
@@ -639,7 +639,7 @@ The project has been developed in separate layers and integrated progressively.
 - API client and configurable data modes.
 - PWA manifest and service-worker functionality.
 - Frontend loading, error, empty, and offline states.
-- Jakarta EE backend application.
+- Jakarta EE middleware application.
 - MongoDB database connectivity.
 - Device registration and retrieval.
 - REST health and measurement retrieval endpoints.
@@ -647,9 +647,9 @@ The project has been developed in separate layers and integrated progressively.
 
 ### Integration dependencies
 
-- Complete live sensor-to-dashboard validation depends on the IoT gateway, MQTT, Node-RED, and backend ingestion pipeline operating together.
+- Complete live sensor-to-dashboard validation depends on the IoT gateway, MQTT, Node-RED, and middleware ingestion pipeline operating together.
 - Historical and latest measurement displays require measurements to be present in MongoDB.
-- Environmental property mappings should remain consistent across the sensors, backend API, and frontend.
+- Environmental property mappings should remain consistent across the sensors, middleware API, and frontend.
 
 ---
 
@@ -677,8 +677,8 @@ These are potential improvements and should not be considered implemented functi
 
 Smart Museum demonstrates how IoT technologies and web application development can be combined to support the preservation of cultural heritage.
 
-By connecting environmental sensors to a centralized backend and an accessible monitoring dashboard, the system provides a foundation for collecting, storing, and visualizing environmental information across museum exhibition spaces.
+By connecting environmental sensors to a centralized middleware and an accessible monitoring dashboard, the system provides a foundation for collecting, storing, and visualizing environmental information across museum exhibition spaces.
 
-Its modular architecture separates IoT data collection, communication, backend processing, database persistence, and frontend presentation, making the platform suitable for collaborative development and future expansion.
+Its modular architecture separates IoT data collection, communication, middleware processing, database persistence, and frontend presentation, making the platform suitable for collaborative development and future expansion.
 
 **Smart Museum: Using IoT technology to support the monitoring and preservation of cultural heritage.**

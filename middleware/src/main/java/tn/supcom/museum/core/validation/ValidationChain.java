@@ -1,0 +1,43 @@
+/*
+ * Module  : ValidationChain
+ * Auteur  : P2 (Middleware)
+ * Date    : 2026-11-07
+ * Version : 1.1
+ */
+package tn.supcom.museum.core.validation;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import tn.supcom.museum.core.model.Measurement;
+import tn.supcom.museum.core.repository.DeviceRepository;
+import tn.supcom.museum.core.repository.MeasurementRepository;
+import tn.supcom.museum.core.repository.ThingRepository;
+import tn.supcom.museum.core.validation.ValidationHandler.Outcome;
+
+@ApplicationScoped
+public class ValidationChain {
+
+    @Inject
+    DeviceRepository devices;
+    @Inject
+    MeasurementRepository measurements;
+    @Inject
+    ThingRepository things;
+
+    private ValidationHandler head;
+
+    @PostConstruct
+    void build() {
+        head = new SchemaHandler();
+        head.linkWith(new DeviceIdentityHandler(devices))
+                .linkWith(new RangeHandler())
+                .linkWith(new TrustHandler(devices))
+                .linkWith(new AffordanceHandler(things::findDeclaredProperties))
+                .linkWith(new PersistHandler(measurements, devices));
+    }
+
+    public Outcome process(Measurement m) {
+        return head.handle(m);
+    }
+}
