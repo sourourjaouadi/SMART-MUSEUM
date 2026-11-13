@@ -55,10 +55,10 @@ la section Authentification ci-dessous.
 | SEED_DEVICES | true | Cree bme280-01 (salle-01) et sim-bme280-02 (salle-02), actifs, avec leur TD |
 
 ## Persistance : Jakarta NoSQL + Jakarta Data
-- Entites Jakarta NoSQL (`@Entity`, `@Id`, `@Column`) dans `entity/` : `DeviceEntity` (devices),
+- Entites Jakarta NoSQL (`@Entity`, `@Id`, `@Column`) dans `core/entity/` : `DeviceEntity` (devices),
   `MeasurementEntity` (measurements), `ThingEntity` (things).
 - Repositories Jakarta Data (`@Repository`, `BasicRepository`, `@Insert`, requetes par nom de methode)
-  dans `data/`, implementes a l'execution par Eclipse JNoSQL 1.1 (Jakarta Data 1.0).
+  dans `core/data/`, implementes a l'execution par Eclipse JNoSQL 1.1 (Jakarta Data 1.0).
 - Configuration dans `src/main/resources/META-INF/microprofile-config.properties`
   (MicroProfile Config fourni par WildFly).
 - Les `_id` MongoDB sont les identifiants metier (deviceId, measurementId) : une base creee
