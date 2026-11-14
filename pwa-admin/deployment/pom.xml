@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>tn.supcom.museum</groupId>
+  <artifactId>smart-museum-admin-static</artifactId>
+  <version>1.0.0</version>
+  <packaging>war</packaging>
+  <name>Smart Museum Admin PWA static site</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <pwa.dist>${project.basedir}/../dist</pwa.dist>
+  </properties>
+
+  <build>
+    <finalName>smart-museum-admin</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>require-admin-production-build</id>
+            <phase>validate</phase>
+            <goals><goal>run</goal></goals>
+            <configuration>
+              <target>
+                <available file="${pwa.dist}/index.html" type="file" property="admin.dist.index.exists"/>
+                <available file="${pwa.dist}/manifest.webmanifest" type="file" property="admin.dist.manifest.exists"/>
+                <available file="${pwa.dist}/service-worker.js" type="file" property="admin.dist.worker.exists"/>
+                <fail unless="admin.dist.index.exists" message="Admin dist/index.html is missing. Run npm run build in pwa-admin before packaging."/>
+                <fail unless="admin.dist.manifest.exists" message="Admin dist/manifest.webmanifest is missing. Run npm run build in pwa-admin before packaging."/>
+                <fail unless="admin.dist.worker.exists" message="Admin dist/service-worker.js is missing. Run npm run build in pwa-admin before packaging."/>
+                <uptodate property="admin.dist.is.current" targetfile="${pwa.dist}/index.html">
+                  <srcfiles dir="${project.basedir}/../src" includes="**/*"/>
+                  <srcfiles dir="${project.basedir}/../public" includes="**/*"/>
+                  <srcfiles dir="${project.basedir}/.." includes="index.html,package.json,package-lock.json,vite.config.js"/>
+                </uptodate>
+                <fail unless="admin.dist.is.current" message="Admin dist is older than one or more source/config files. Run npm run build in pwa-admin before packaging."/>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-war-plugin</artifactId>
+        <version>3.4.0</version>
+        <configuration>
+          <warSourceDirectory>${pwa.dist}</warSourceDirectory>
+          <failOnMissingWebXml>false</failOnMissingWebXml>
+          <webResources>
+            <resource>
+              <directory>${project.basedir}/src/main/webapp</directory>
+            </resource>
+          </webResources>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

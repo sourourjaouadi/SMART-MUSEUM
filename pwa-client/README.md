@@ -118,6 +118,27 @@ freshness. A new service worker waits for the user to select **Update app**.
    open. The app shows **Update app** after the new worker is ready; selecting
    it activates the worker and reloads the app.
 
+## Local WildFly static WAR (M1)
+
+The PWA can be served at the root of its own WildFly virtual host as
+`smart-museum-client.war`. Build the Vite bundle first, then package it:
+
+```powershell
+npm ci
+npm test
+npm run build
+mvn -f deployment/pom.xml package
+```
+
+The WAR is written to `deployment/target/smart-museum-client.war` and contains
+only the production `dist/` bundle plus its WildFly descriptor. The descriptor
+binds it to the `smartmuseum-host` Undertow host. See
+[`deployment/README.md`](../deployment/README.md) for host setup, deployment,
+API-mode CORS configuration, HTTPS requirements, and rollback. The default
+Client mode remains `mock`; set `VITE_DATA_MODE=api` and
+`VITE_API_BASE_URL` before building only when the M1 demonstration requires the
+existing backend connection.
+
 ## Project structure
 
 - `src/pages/` — dashboard page
