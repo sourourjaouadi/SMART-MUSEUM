@@ -1,0 +1,20 @@
+# Run with:
+#   jboss-cli.bat --connect --file=deployment\wildfly-pwa-hosts.cli
+#
+# This script creates only the two named hosts if absent. Existing hosts are
+# never rewritten; their current aliases are printed for manual conflict review.
+# It does not deploy WARs, edit listeners, change TLS, or touch default-host.
+
+if (outcome == success) of /subsystem=undertow/server=default-server/host=smartmuseum-host:read-resource
+    echo Client host already exists; current aliases follow. No changes made.
+    /subsystem=undertow/server=default-server/host=smartmuseum-host:read-attribute(name=alias)
+else
+    /subsystem=undertow/server=default-server/host=smartmuseum-host:add(alias=["smartmuseum.test"])
+end-if
+
+if (outcome == success) of /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:read-resource
+    echo Admin host already exists; current aliases follow. No changes made.
+    /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:read-attribute(name=alias)
+else
+    /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:add(alias=["admin.smartmuseum.test"])
+end-if

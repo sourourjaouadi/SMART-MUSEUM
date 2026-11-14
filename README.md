@@ -496,3 +496,22 @@ These items are planned and are not implemented functionality.
 ## 12. Conclusion
 
 Smart Museum connects environmental sensors, an MQTT messaging chain, a Jakarta EE middleware and two PWAs to monitor and protect museum collections. Its layered architecture separates data collection, messaging, middleware processing (`api`, `iam`, `core`), persistence and presentation, so that each part can be developed, tested and secured independently.
+
+## M1 local PWA hosting on WildFly
+
+For the M1 local hosting milestone, the existing Client and Admin Vite builds
+can be packaged as two independent static WARs on separate WildFly Undertow
+virtual hosts. Each PWA is served at `/` on its own origin, preserving its
+root-relative assets and isolating its service-worker scope. The backend remains
+the existing `middleware/target/smart-museum.war`; this does not split or
+repackage the middleware.
+
+The local defaults are `smartmuseum.test` (Client) and
+`admin.smartmuseum.test` (Admin). Build, configure, deploy, verify, and rollback
+instructions are in [`deployment/README.md`](deployment/README.md). Admin stays
+mock-only, and Client keeps its existing demo/API modes.
+
+This local M1 hosting setup is separate from the documented cloud topology in
+section 2, where Nginx terminates public TLS and serves the PWAs while proxying
+to WildFly. No public production hostnames, certificates, or TLS configuration
+are introduced by the local M1 deployment support.

@@ -68,6 +68,25 @@ cannot control another application. Hosting under a subpath or on the same
 origin as another PWA requires a coordinated Vite base path, manifest URLs,
 asset URLs, and service-worker scope change before deployment.
 
+## Local WildFly static WAR (M1)
+
+The Admin PWA is packaged separately as `smart-museum-admin.war` and served at
+the root of the `admin-smartmuseum-host` Undertow host. Build and package it
+from `pwa-admin/`:
+
+```powershell
+npm ci
+npm test
+npm run build
+mvn -f deployment/pom.xml package
+```
+
+The output is `deployment/target/smart-museum-admin.war`. It contains the
+production `dist/` bundle and its own root-context WildFly descriptor. The
+Admin remains mock-only. See [`deployment/README.md`](../deployment/README.md)
+for local aliases, WildFly setup, verification, HTTPS requirements, and
+rollback.
+
 ## Future backend integration
 
 `src/admin/services/adminService.js` is the mock data boundary. Replace its
