@@ -155,6 +155,14 @@ export function createApiClient({
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 
+  function requestUrl(path) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const pathWithoutDuplicateApi = normalizedBaseUrl.endsWith('/api') && normalizedPath.startsWith('/api/')
+      ? normalizedPath.slice('/api'.length)
+      : normalizedPath;
+    return `${normalizedBaseUrl}${pathWithoutDuplicateApi}`;
+  }
+
   async function requestJson(path, {
     signal,
     method = 'GET',
@@ -180,7 +188,7 @@ export function createApiClient({
         const headers = { Accept: 'application/json' };
         if (body !== undefined) headers['Content-Type'] = 'application/json';
         if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-        response = await fetchImpl(`${normalizedBaseUrl}${path}`, {
+        response = await fetchImpl(requestUrl(path), {
           method,
           headers,
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
