@@ -16,7 +16,18 @@ foreach ($app in @('pwa-client', 'pwa-admin')) {
         throw "Node dependencies are missing for $app. Install from the lockfile before building."
     }
     if (-not $SkipFrontendTests) { Invoke-Checked 'npm.cmd' @('test') $appPath }
-    Invoke-Checked 'npm.cmd' @('run', 'build') $appPath
+    $previousApiBaseUrl = [Environment]::GetEnvironmentVariable('VITE_API_BASE_URL', 'Process')
+    $previousDataMode = [Environment]::GetEnvironmentVariable('VITE_DATA_MODE', 'Process')
+    try {
+        if ($app -eq 'pwa-client') {
+            $env:VITE_API_BASE_URL = 'https://api.smartmuseum.test:8443/api'
+            $env:VITE_DATA_MODE = 'api'
+        }
+        Invoke-Checked 'npm.cmd' @('run', 'build') $appPath
+    } finally {
+        [Environment]::SetEnvironmentVariable('VITE_API_BASE_URL', $previousApiBaseUrl, 'Process')
+        [Environment]::SetEnvironmentVariable('VITE_DATA_MODE', $previousDataMode, 'Process')
+    }
     Invoke-Checked 'mvn.cmd' @('-f', 'deployment/pom.xml', 'package') $appPath
 }
 Invoke-Checked 'mvn.cmd' @('-f', 'middleware/pom.xml', 'clean', 'verify') $repoRoot
@@ -24,6 +35,8 @@ Invoke-Checked 'mvn.cmd' @('-f', 'middleware/pom.xml', 'clean', 'verify') $repoR
 $artifacts = @(
     'pwa-client/deployment/target/smart-museum-client.war',
     'pwa-admin/deployment/target/smart-museum-admin.war',
+    'middleware/core/target/smart-museum-core.war',
+    'middleware/iam/target/smart-museum-iam.war',
     'middleware/api/target/smart-museum.war'
 )
 foreach ($artifact in $artifacts) {

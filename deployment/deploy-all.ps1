@@ -24,7 +24,12 @@ $currentApiHash = (Get-FileHash -LiteralPath (Join-Path $deployments 'smart-muse
 if (($backupHash -ne $ExpectedApiBackupSha256.ToUpperInvariant()) -or ($currentApiHash -ne $backupHash)) {
     throw 'The current API deployment and verified rollback backup must match before any application is replaced.'
 }
-& (Join-Path $PSScriptRoot 'deploy-api.ps1') -WildFlyHome $WildFlyHome -VerifiedApiBackup $VerifiedApiBackup -ExpectedApiBackupSha256 $ExpectedApiBackupSha256 -ReplaceExisting
+$middlewareArtifacts = @(
+    (Join-Path $repoRoot 'middleware\core\target\smart-museum-core.war'),
+    (Join-Path $repoRoot 'middleware\iam\target\smart-museum-iam.war')
+)
+foreach ($artifact in $middlewareArtifacts) { if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Required middleware artifact is missing: $artifact" } }
+& (Join-Path $PSScriptRoot 'deploy-middleware.ps1') -WildFlyHome $WildFlyHome -VerifiedApiBackup $VerifiedApiBackup -ExpectedApiBackupSha256 $ExpectedApiBackupSha256 -ReplaceExisting
 & (Join-Path $PSScriptRoot 'deploy-client.ps1') -WildFlyHome $WildFlyHome -ReplaceExisting
 & (Join-Path $PSScriptRoot 'deploy-admin.ps1') -WildFlyHome $WildFlyHome -ReplaceExisting
-Write-Host 'All three WARs were copied. Confirm WildFly deployment status before runtime testing.'
+Write-Host 'All five application WARs were copied. Confirm every WildFly deployment before runtime testing.'

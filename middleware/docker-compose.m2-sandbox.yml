@@ -1,0 +1,14 @@
+﻿name: smart-museum-m2-sandbox
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: museum-m2-sandbox-mongo
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - museum-m2-sandbox-data:/data/db
+
+volumes:
+  museum-m2-sandbox-data:
+    name: museum-m2-sandbox-data

@@ -20,6 +20,9 @@ $rng.GetBytes($bytes)
 $token = [Convert]::ToBase64String($bytes)
 $rng.GetBytes($bytes)
 $signingKey = [Convert]::ToBase64String($bytes)
+$rng.GetBytes($bytes)
+$internalToken = [Convert]::ToBase64String($bytes)
+$lines = $lines -replace '^INTER_SERVICE_TOKEN=.*$', "INTER_SERVICE_TOKEN=$internalToken"
 $lines = $lines -replace '^INGEST_SERVICE_TOKEN=.*$', "INGEST_SERVICE_TOKEN=$token"
 $lines = $lines -replace '^JWT_SIGNING_KEY_BASE64=.*$', "JWT_SIGNING_KEY_BASE64=$signingKey"
 
@@ -58,6 +61,7 @@ try {
 } finally {
     $token = $null
     $signingKey = $null
+    $internalToken = $null
     $password = $null
     $AdminPassword = $null
     $bytes = $null

@@ -37,7 +37,7 @@ try {
     }
 } finally {
     if ($clearImportedSecrets) {
-        @('INGEST_SERVICE_TOKEN', 'JWT_SIGNING_KEY_BASE64', 'BOOTSTRAP_ADMIN_PASSWORD') |
+        @('INGEST_SERVICE_TOKEN', 'INTER_SERVICE_TOKEN', 'JWT_SIGNING_KEY_BASE64', 'BOOTSTRAP_ADMIN_PASSWORD', 'TLS_KEYSTORE_PASSWORD') |
             ForEach-Object { [Environment]::SetEnvironmentVariable($_, $null, 'Process') }
     }
 }

@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('client', 'admin', 'api')][string]$Application,
+    [Parameter(Mandatory = $true)][ValidateSet('client', 'admin', 'api', 'core', 'iam')][string]$Application,
     [Parameter(Mandatory = $true)][string]$WarPath,
     [Parameter(Mandatory = $true)][string]$WildFlyHome,
     [switch]$ReplaceExisting,
@@ -13,6 +13,8 @@ $names = @{
     client = 'smart-museum-client.war'
     admin  = 'smart-museum-admin.war'
     api    = 'smart-museum.war'
+    core   = 'smart-museum-core.war'
+    iam    = 'smart-museum-iam.war'
 }
 $warPath = (Resolve-Path -LiteralPath $WarPath -ErrorAction Stop).Path
 $deployments = Join-Path $WildFlyHome 'standalone\deployments'
@@ -61,7 +63,6 @@ if ($Application -eq 'api' -and -not (Test-Path -LiteralPath $destination)) {
 $staging = "$destination.m2-staging"
 $deployedMarker = "$destination.deployed"
 $failedMarker = "$destination.failed"
-$deploymentStart = [DateTime]::UtcNow
 Copy-Item -LiteralPath $warPath -Destination $staging -Force
 if ((Get-FileHash -LiteralPath $warPath -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $staging -Algorithm SHA256).Hash) {
     Remove-Item -LiteralPath $staging -Force
@@ -71,19 +72,47 @@ if (Test-Path -LiteralPath $deployedMarker) { Remove-Item -LiteralPath $deployed
 if (Test-Path -LiteralPath $failedMarker) { Remove-Item -LiteralPath $failedMarker -Force }
 Move-Item -LiteralPath $staging -Destination $destination -Force
 $deploymentOk = $false
+$lastStatus = 'WildFly has not reported deployment status yet.'
+$cliCheckIntervalSeconds = 15
+$deploymentTimeoutSeconds = 120
+$startedAt = [DateTime]::UtcNow
+$nextCliCheck = $startedAt
 $env:NOPAUSE = 'true'
-for ($attempt = 0; $attempt -lt 45; $attempt++) {
-    if ((Test-Path -LiteralPath $failedMarker) -and (Get-Item -LiteralPath $failedMarker).LastWriteTimeUtc -ge $deploymentStart) {
+while (([DateTime]::UtcNow - $startedAt).TotalSeconds -lt $deploymentTimeoutSeconds) {
+    # The old markers were removed before the scanner was triggered, so marker
+    # existence is sufficient. Comparing filesystem timestamps to UtcNow can
+    # miss a successful deployment on filesystems with coarse timestamp resolution.
+    if (Test-Path -LiteralPath $failedMarker) {
+        $lastStatus = Get-Content -LiteralPath $failedMarker -Raw -ErrorAction SilentlyContinue
         break
     }
-    if ((Test-Path -LiteralPath $deployedMarker) -and (Get-Item -LiteralPath $deployedMarker).LastWriteTimeUtc -ge $deploymentStart) {
+    if (Test-Path -LiteralPath $deployedMarker) {
         $deploymentOk = $true
         break
     }
-    $cliOutput = & $cli '--connect' "--command=deployment-info --name=$expectedName" 2>$null
-    if ($LASTEXITCODE -eq 0 -and ($cliOutput -match "$expectedName\s+$expectedName\s+\S+\s+true\s+OK")) {
-        $deploymentOk = $true
-        break
+
+    # Scanner markers are authoritative for this file based deployment. Query
+    # WildFly's management model occasionally as a fallback, using JSON rather
+    # than parsing the human-readable deployment-info table.
+    if ([DateTime]::UtcNow -ge $nextCliCheck) {
+        $statusCommand = "--command=/deployment=$($expectedName):read-attribute(name=status)"
+        $cliOutput = & $cli '--connect' '--output-json' $statusCommand 2>$null
+        $cliExitCode = $LASTEXITCODE
+        $nextCliCheck = [DateTime]::UtcNow.AddSeconds($cliCheckIntervalSeconds)
+        if ($cliExitCode -eq 0) {
+            try {
+                $statusResponse = ($cliOutput -join [Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop
+                if ($statusResponse.outcome -eq 'success' -and $statusResponse.result -eq 'OK') {
+                    $deploymentOk = $true
+                    break
+                }
+                $lastStatus = ($cliOutput -join ' ').Trim()
+            } catch {
+                $lastStatus = 'WildFly returned an unreadable JSON deployment status.'
+            }
+        } else {
+            $lastStatus = ($cliOutput -join ' ').Trim()
+        }
     }
     Start-Sleep -Seconds 2
 }
@@ -91,8 +120,8 @@ if (-not $deploymentOk) {
     if ($rollbackPath -and (Test-Path -LiteralPath $rollbackPath)) {
         Copy-Item -LiteralPath $rollbackPath -Destination $staging -Force
         Move-Item -LiteralPath $staging -Destination $destination -Force
-        throw "$expectedName did not deploy successfully. The previous WAR was restored from the verified backup; inspect the WildFly log and marker files."
+        throw "$expectedName did not deploy successfully. The previous WAR was restored from the verified backup. Last WildFly status: $lastStatus"
     }
-    throw "$expectedName did not deploy successfully. Inspect the WildFly log and marker files."
+    throw "$expectedName did not deploy successfully. Last WildFly status: $lastStatus"
 }
-Write-Host "$expectedName deployed successfully according to the WildFly deployment marker."
+Write-Host "$expectedName deployed successfully and WildFly reports status OK."

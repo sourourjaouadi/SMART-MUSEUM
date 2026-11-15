@@ -16,9 +16,11 @@ if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
 
 $allowed = @(
     'SMART_MUSEUM_ENV', 'JNOSQL_MONGODB_HOST', 'JNOSQL_DOCUMENT_DATABASE',
+    'CORE_SERVICE_URL', 'IAM_SERVICE_URL', 'INTER_SERVICE_TOKEN',
     'INGEST_SERVICE_TOKEN', 'JWT_SIGNING_KEY_BASE64', 'JWT_ISSUER',
     'JWT_ACCESS_TOKEN_SECONDS', 'CORS_ALLOWED_ORIGINS', 'BOOTSTRAP_ADMIN_NAME',
-    'BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_PASSWORD', 'SEED_DEVICES', 'MQTT_BROKER_URI'
+    'BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_PASSWORD', 'SEED_DEVICES', 'MQTT_BROKER_URI',
+    'TLS_KEYSTORE_PATH', 'TLS_KEYSTORE_PASSWORD'
 )
 $allowed | ForEach-Object { [Environment]::SetEnvironmentVariable($_, $null, 'Process') }
 $seen = @{}
@@ -39,8 +41,9 @@ if ($env:SMART_MUSEUM_ENV -ne $Profile) { throw "SMART_MUSEUM_ENV must match sel
 
 $required = @(
     'JNOSQL_MONGODB_HOST', 'JNOSQL_DOCUMENT_DATABASE', 'INGEST_SERVICE_TOKEN',
+    'CORE_SERVICE_URL', 'IAM_SERVICE_URL', 'INTER_SERVICE_TOKEN',
     'JWT_SIGNING_KEY_BASE64', 'JWT_ISSUER', 'JWT_ACCESS_TOKEN_SECONDS',
-    'CORS_ALLOWED_ORIGINS', 'SEED_DEVICES', 'MQTT_BROKER_URI'
+    'CORS_ALLOWED_ORIGINS', 'SEED_DEVICES', 'MQTT_BROKER_URI', 'TLS_KEYSTORE_PATH', 'TLS_KEYSTORE_PASSWORD'
 )
 $missing = @($required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_, 'Process')) })
 if ($missing.Count -gt 0) { throw "Required environment variables are missing: $($missing -join ', ')" }
