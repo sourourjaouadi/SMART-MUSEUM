@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.json.bind.Jsonb;
 import jakarta.json.bind.JsonbBuilder;
 import tn.supcom.museum.core.config.Env;
+import tn.supcom.museum.core.config.RuntimeConfiguration;
 import tn.supcom.museum.core.model.Device;
 import tn.supcom.museum.core.repository.DeviceRepository;
 import tn.supcom.museum.core.repository.ThingRepository;
@@ -31,13 +32,14 @@ public class SeedBean {
     ThingRepository things;
 
     void onStart(@Observes @Initialized(ApplicationScoped.class) Object init) {
+        RuntimeConfiguration.validate();
         if (!"true".equalsIgnoreCase(Env.get("SEED_DEVICES", "true"))) return;
         String broker = Env.get("MQTT_BROKER_URI", "mqtt://localhost:1883");
         try (Jsonb jsonb = JsonbBuilder.create()) {
             seed(jsonb, broker, "bme280-01", "bme280", "salle-01", "gw-01");
             seed(jsonb, broker, "sim-bme280-02", "bme280", "salle-02", "gw-sim");
         } catch (Exception e) {
-            LOG.log(Level.WARNING, "Seed des appareils impossible", e);
+            LOG.log(Level.WARNING, "Seed des appareils impossible ({0})", e.getClass().getSimpleName());
         }
     }
 

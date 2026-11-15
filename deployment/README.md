@@ -1,8 +1,8 @@
 # WildFly static PWA deployments (M1)
 
 This local M1 topology deploys each Vite production bundle as an independent
-static WAR on a separate Undertow host. The Java backend remains the existing
-`middleware/target/smart-museum.war` deployment. This section describes the
+static WAR on a separate Undertow host. The modular Java backend is the
+`middleware/api/target/smart-museum.war` deployment. This section describes the
 M1 WildFly hosting decision; the cloud architecture elsewhere in the project
 continues to document Nginx as the public TLS reverse proxy.
 
@@ -12,7 +12,7 @@ continues to document Nginx as the public TLS reverse proxy.
 |---|---|---|---|---|
 | Client | `smart-museum-client.war` | `/` | `smartmuseum-host` | `smartmuseum.test` |
 | Admin | `smart-museum-admin.war` | `/` | `admin-smartmuseum-host` | `admin.smartmuseum.test` |
-| Middleware | `smart-museum.war` | `/` | Existing backend host | Existing configuration |
+| Middleware API | `middleware/api/target/smart-museum.war` | `/` | `api-smartmuseum-host` | `api.smartmuseum.test` |
 
 The aliases are local development defaults, not production domains. Each PWA
 must remain on its own origin because its assets and service worker use the
@@ -29,7 +29,8 @@ the CLI file associates the host aliases with those resources.
   deployment. Keep the management interface private.
 
 The checked local WildFly 42 config has Undertow server `default-server`,
-default host `default-host` with alias `localhost`, and HTTP/HTTPS listeners.
+default host `default-host` with alias `localhost`, M1 client and admin hosts,
+and HTTP/HTTPS listeners. The API host is added by the M2 CLI file.
 The supplied CLI adds only the two named hosts; it does not edit listeners,
 TLS, `default-host`, or management interfaces. Inspect the actual installation
 before use.
@@ -81,6 +82,7 @@ the project does not edit it automatically:
 ```text
 127.0.0.1 smartmuseum.test
 127.0.0.1 admin.smartmuseum.test
+127.0.0.1 api.smartmuseum.test
 ```
 
 From the repository root, set the actual WildFly installation path and run the
@@ -92,20 +94,31 @@ existing host or alias.
 
 ```powershell
 $wildflyHome = 'C:\path\to\wildfly'
-$env:NOPAUSE = 'true'
-& "$wildflyHome\bin\jboss-cli.bat" --connect --file="deployment\wildfly-pwa-hosts.cli"
+.\deployment\configure-wildfly-hosts.ps1 -WildFlyHome $wildflyHome
 ```
+
+The API WAR descriptor selects `api-smartmuseum-host` and root context `/`.
+The M2 CLI only creates that named Undertow host if absent; it does not edit
+listeners, TLS, existing hosts, or the management interface. Inspect the
+resulting host resource and alias before deploying.
 
 The checked local WildFly configuration includes the default deployment
 scanner for `standalone/deployments`. Copy each WAR there independently:
 
 ```powershell
-$clientWar = (Resolve-Path 'pwa-client/deployment/target/smart-museum-client.war').Path
-$adminWar = (Resolve-Path 'pwa-admin/deployment/target/smart-museum-admin.war').Path
-$deployments = Join-Path $wildflyHome 'standalone\deployments'
-Copy-Item -LiteralPath $clientWar -Destination $deployments
-Copy-Item -LiteralPath $adminWar -Destination $deployments
+.\deployment\deploy-client.ps1 -WildFlyHome $wildflyHome -ReplaceExisting
+.\deployment\deploy-admin.ps1 -WildFlyHome $wildflyHome -ReplaceExisting
+.\deployment\deploy-api.ps1 -WildFlyHome $wildflyHome `
+  -VerifiedApiBackup 'C:\wildfly-m2-backups\smart-museum-before-m2-20261115-092936.war' `
+  -ExpectedApiBackupSha256 '<verified SHA-256>' -ReplaceExisting
 ```
+
+Each replacement first creates and hashes a timestamped copy under
+`standalone/m2-backups`. API replacement additionally requires the current WAR
+and supplied rollback backup to match the caller-provided SHA-256. These
+deployment commands overwrite current deployments only after the explicit
+`-ReplaceExisting` switch. `rollback-api.ps1` similarly requires
+`-ConfirmRollback` and the expected verified backup hash.
 
 Confirm deployment status in the WildFly log or management console. The two
 WARs both use `/`, but each descriptor selects a different virtual host, so
@@ -126,8 +139,9 @@ Check each root, manifest, service worker, one built asset, and an icon. They
 must return the correct app and usable MIME types, including
 `application/manifest+json` for the manifest. The Admin's `#dashboard`
 navigation should survive reload; its actions remain mock-only. The Client
-should load in its existing demo mode. The backend remains at its configured
-health endpoint, usually `http://localhost:8080/api/health`.
+should load in its existing demo mode. The API health endpoint is
+`http://api.smartmuseum.test:8080/api/health` once its virtual host is configured.
+The API WAR is not mapped to `default-host` by this configuration.
 
 HTTPS is required for service-worker/PWA installation on non-local hostnames.
 The local `.test` aliases are not secure contexts over plain HTTP. Browser

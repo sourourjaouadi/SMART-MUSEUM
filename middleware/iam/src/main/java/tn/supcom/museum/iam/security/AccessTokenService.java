@@ -7,6 +7,7 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import tn.supcom.museum.core.config.Env;
+import tn.supcom.museum.core.config.RuntimeConfiguration;
 
 import javax.crypto.SecretKey;
 import java.time.Instant;
@@ -20,6 +21,7 @@ public class AccessTokenService {
 
     @PostConstruct
     void initialize() {
+        RuntimeConfiguration.validate();
         String encodedKey = Env.get("JWT_SIGNING_KEY_BASE64", "");
         if (encodedKey.isBlank()) {
             throw new IllegalStateException("JWT_SIGNING_KEY_BASE64 must be configured");

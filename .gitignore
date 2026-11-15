@@ -6,3 +6,6 @@ __pycache__/
 .idea/
 .vscode/
 config.yaml
+middleware/config/*.env
+!middleware/config/*.env.example
+middleware/config/*.properties.local

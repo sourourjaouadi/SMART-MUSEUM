@@ -26,6 +26,7 @@
     <dependency>
       <groupId>jakarta.data</groupId>
       <artifactId>jakarta.data-api</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>

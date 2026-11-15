@@ -33,7 +33,7 @@ public class HealthResource {
             devices.findById("__health__");
             return true;
         } catch (RuntimeException e) {
-            LOG.log(Level.FINE, "MongoDB injoignable", e);
+            LOG.log(Level.FINE, "MongoDB injoignable ({0})", e.getClass().getSimpleName());
             return false;
         }
     }

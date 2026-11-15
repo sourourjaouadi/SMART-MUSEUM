@@ -21,10 +21,17 @@
     <dependency>
       <groupId>org.eclipse.jnosql.databases</groupId>
       <artifactId>jnosql-mongodb</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>jakarta.data</groupId>
+          <artifactId>jakarta.data-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>jakarta.data</groupId>
       <artifactId>jakarta.data-api</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>

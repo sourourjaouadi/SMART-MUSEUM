@@ -14,24 +14,55 @@ Le code Java est dans `src/main/java/tn/supcom/museum/`, en trois modules :
 Dependances : `api` -> `iam`, `core` ; `iam` -> `core` ; `core` ne depend ni de `api` ni de `iam`.
 Les URL de l'API (`/api/...`) sont inchangees.
 
-## Lancer en local (Windows / PowerShell)
+## Local DEV middleware (Windows / PowerShell)
+
+The DEV profile is locked to the isolated `museum-m2-sandbox-mongo` container,
+loopback port 27018 and database `museum_m2_sandbox`. Do not use
+`docker-compose.dev.yml` for M2 runtime testing: that older file names the
+original `museum-mongo` container and `backend_mongo-data` volume.
+
+From the repository root:
+
 ```powershell
-cd middleware
-docker compose -f docker-compose.dev.yml up -d        # MongoDB
-mvn clean package                                      # tests + target/smart-museum.war
-copy target\smart-museum.war C:\wildfly-41.0.1.Final\standalone\deployments\
-$env:INGEST_SERVICE_TOKEN = "dev-token"
-$env:CORS_ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:5174"
-$env:JWT_SIGNING_KEY_BASE64 = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:JWT_ISSUER = "smart-museum"
-$env:JWT_ACCESS_TOKEN_SECONDS = "900"
-# Optional first-run bootstrap; supply real secrets through a protected secret store.
-$env:BOOTSTRAP_ADMIN_NAME = "Museum Administrator"
-$env:BOOTSTRAP_ADMIN_EMAIL = "admin@museum.example"
-# Set BOOTSTRAP_ADMIN_PASSWORD through a protected environment/secret manager.
-C:\wildfly-41.0.1.Final\bin\standalone.bat
+docker compose -f middleware/docker-compose.m2-sandbox.yml up -d
+docker inspect museum-m2-sandbox-mongo --format '{{.State.Status}} {{json .NetworkSettings.Ports}}'
+.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin
 ```
-Les variables d'environnement doivent etre definies dans le terminal qui lance WildFly.
+
+The initializer creates random service and JWT secrets without printing them,
+then prompts for a sandbox admin password without echoing it. Keep `dev.env`
+local; `.env` files are not automatically loaded by WildFly. The repo
+`.gitignore` excludes `middleware/config/*.env`. Omit `-CreateBootstrapAdmin`
+to skip account creation.
+
+```powershell
+$env:WILDFLY_HOME = 'C:\wildfly-41.0.1.Final\wildfly-42.0.0.Final'
+.\deployment\start-wildfly.ps1 -Profile dev
+```
+
+`start-wildfly.ps1` imports the ignored `middleware/config/dev.env` into its
+process, validates the profile, refuses occupied HTTP/management ports, and
+starts WildFly in the current console. The API validates the complete runtime
+configuration before either startup observer can touch MongoDB. Use
+`SEED_DEVICES=true` only with this isolated DEV profile.
+
+Build all three independently packaged WARs from the repo root:
+
+```powershell
+.\deployment\build-all.ps1
+```
+
+This runs Client and Admin tests/builds, packages their WARs, then runs the
+middleware parent `clean verify`. Expected artifacts are:
+
+```text
+pwa-client/deployment/target/smart-museum-client.war
+pwa-admin/deployment/target/smart-museum-admin.war
+middleware/api/target/smart-museum.war
+```
+
+The middleware Maven reactor produces only the API WAR. Client and Admin WARs
+remain in their existing Vite/Maven pipelines.
 
 ## Verifier
 ```powershell
@@ -43,16 +74,29 @@ la section Authentification ci-dessous.
 ## Variables
 | Variable | Defaut | Role |
 |---|---|---|
-| JNOSQL_MONGODB_HOST | localhost:27017 | Hote MongoDB (Jakarta NoSQL, MicroProfile Config) |
-| JNOSQL_DOCUMENT_DATABASE | museum | Base MongoDB |
-| INGEST_SERVICE_TOKEN | (obligatoire) | Jeton Node-RED -> middleware |
-| CORS_ALLOWED_ORIGINS | http://localhost:5173,http://localhost:5174 | Origines locales autorisees pour les PWA |
+| JNOSQL_MONGODB_HOST | required; DEV is localhost:27018 | Host MongoDB (Jakarta NoSQL, MicroProfile Config) |
+| JNOSQL_DOCUMENT_DATABASE | required; DEV is museum_m2_sandbox | Database name |
+| INGEST_SERVICE_TOKEN | required, >= 32 characters | Node-RED -> middleware token |
+| CORS_ALLOWED_ORIGINS | required | Exact PWA origins, comma separated |
 | JWT_SIGNING_KEY_BASE64 | (obligatoire, 32 octets aleatoires minimum) | Cle HMAC JWT Base64, uniquement cote serveur |
 | JWT_ISSUER | smart-museum | Valeur issuer attendue dans les JWT |
 | JWT_ACCESS_TOKEN_SECONDS | 900 | Duree de vie du jeton (60 a 3600 secondes) |
 | BOOTSTRAP_ADMIN_NAME / EMAIL / PASSWORD | (tous optionnels, ensemble) | Cree le premier ADMIN actif s'il n'existe pas; variables serveur seulement |
-| MQTT_BROKER_URI | mqtt://localhost:1883 | Base des liens "forms" des TD semees |
-| SEED_DEVICES | true | Cree bme280-01 (salle-01) et sim-bme280-02 (salle-02), actifs, avec leur TD |
+| MQTT_BROKER_URI | required | MQTT base used in seeded Thing Description forms |
+| SEED_DEVICES | required; DEV true, PROD false | Seeds two sample devices only in DEV |
+| SMART_MUSEUM_ENV | required: dev or prod | Startup safety profile |
+
+`middleware/config/dev.properties` documents non-secret DEV properties;
+`prod.properties.example` and `prod.env.example` are templates only. The
+MicroProfile/JNoSQL file contains the provider but intentionally has no database
+or host defaults. JNoSQL obtains those from the WildFly process environment.
+For PROD, supply the complete environment from the service/secret manager and
+start with `deployment/start-wildfly.ps1 -Profile prod -UseParentEnvironment`.
+Keep `SEED_DEVICES=false`; bootstrap is optional and occurs only when all three
+bootstrap values are deliberately provided together. Remove them after setup.
+JNoSQL 1.1.20 requires Jakarta Data 1.0.2. The Maven dependency is aligned to
+1.0.2 and the API is server-provided; the installed WildFly 42 module contains
+1.0.2, so the WAR does not bundle a second Jakarta Data API jar.
 
 ## Persistance : Jakarta NoSQL + Jakarta Data
 - Entites Jakarta NoSQL (`@Entity`, `@Id`, `@Column`) dans `core/entity/` : `DeviceEntity` (devices),
@@ -61,8 +105,8 @@ la section Authentification ci-dessous.
   dans `core/data/`, implementes a l'execution par Eclipse JNoSQL 1.1 (Jakarta Data 1.0).
 - Configuration dans `src/main/resources/META-INF/microprofile-config.properties`
   (MicroProfile Config fourni par WildFly).
-- Les `_id` MongoDB sont les identifiants metier (deviceId, measurementId) : une base creee
-  avec l'ancienne version doit etre videe (`docker compose -f docker-compose.dev.yml down -v`).
+- Les `_id` MongoDB sont les identifiants metier (deviceId, measurementId). Aucun
+  effacement ou changement de volume n'est requis pour la modularisation M2.
 
 ## Codes de reponse de POST /api/ingest/measurements
 202 acceptee, 200 doublon, 400 schema, 401 jeton, 403 appareil inconnu/non fiable,

@@ -5,6 +5,7 @@ import jakarta.enterprise.context.Initialized;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import tn.supcom.museum.core.config.Env;
+import tn.supcom.museum.core.config.RuntimeConfiguration;
 import tn.supcom.museum.core.error.ApiException;
 import tn.supcom.museum.iam.repository.UserRepository;
 import tn.supcom.museum.iam.security.UserAuthenticationService;
@@ -23,6 +24,7 @@ public class BootstrapAdmin {
     UserAuthenticationService authentication;
 
     void onStart(@Observes @Initialized(ApplicationScoped.class) Object init) {
+        RuntimeConfiguration.validate();
         String name = Env.get("BOOTSTRAP_ADMIN_NAME", "");
         String email = Env.get("BOOTSTRAP_ADMIN_EMAIL", "");
         String password = Env.get("BOOTSTRAP_ADMIN_PASSWORD", "");
