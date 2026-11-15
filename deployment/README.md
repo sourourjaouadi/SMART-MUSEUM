@@ -3,9 +3,10 @@
 This local topology deploys each Vite production bundle as an independent
 static WAR on a separate Undertow host. The modular Java backend consists of
 `smart-museum-core.war`, `smart-museum-iam.war`, and the public
-`middleware/api/target/smart-museum.war`. This section describes the
-M1 WildFly hosting decision; the cloud architecture elsewhere in the project
-continues to document Nginx as the public TLS reverse proxy.
+`middleware/api/target/smart-museum.war`. This guide covers the local M1 PWA
+hosting and M2 three-service middleware deployment. The cloud architecture
+elsewhere in the project remains a separate production target that documents
+Nginx as the public TLS reverse proxy.
 
 ## Host and context mapping
 
@@ -100,8 +101,9 @@ the project does not edit it automatically:
 127.0.0.1 api.smartmuseum.test
 ```
 
-From the repository root, set the actual WildFly installation path and run the
-CLI script. It creates missing hosts; if either named resource exists, it
+After starting WildFly as described below and confirming its management
+controller is available, set the actual WildFly installation path and run the
+CLI script from the repository root. It creates missing hosts; if either named resource exists, it
 prints its aliases and leaves it untouched. Confirm each existing host has
 only the intended alias before proceeding. Resolve any conflict manually
 after reviewing the WildFly model; do not allow this script to replace an
@@ -226,13 +228,16 @@ Open each PWA in a normal browser profile and check for certificate errors.
 Verify the Client manifest, service-worker registration, API health fetch, and
 browser console for mixed-content or CORS errors. Windows curl with Schannel
 may report `CRYPT_E_NO_REVOCATION_CHECK` for this local mkcert certificate
-because it has no revocation endpoint. Do not bypass certificate checks. To
-test from PowerShell with strict chain and host validation, use OpenSSL's root:
+because it has no revocation endpoint. Do not bypass certificate checks. Open
+the API and service health URLs in the trusted browser, or run the runtime
+acceptance script, which uses OpenSSL with strict chain and hostname checks:
 
 ```powershell
-$ca = Join-Path $env:LOCALAPPDATA 'mkcert\rootCA.pem'
-curl.exe --cacert $ca https://api.smartmuseum.test:8443/api/health
+.\deployment\test-m2-runtime.ps1 -ConfirmSandboxWrites
 ```
+
+This acceptance script writes test records to the isolated DEV sandbox; see
+the warning and scope below before running it.
 
 `deployment/build-all.ps1` configures the Client with the HTTPS API URL and
 API data mode for its production build. Configure the backend's

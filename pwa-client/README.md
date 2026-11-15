@@ -118,26 +118,32 @@ freshness. A new service worker waits for the user to select **Update app**.
    open. The app shows **Update app** after the new worker is ready; selecting
    it activates the worker and reloads the app.
 
-## Local WildFly static WAR (M1)
+## Local WildFly static WAR (M1/M2)
 
-The PWA can be served at the root of its own WildFly virtual host as
-`smart-museum-client.war`. Build the Vite bundle first, then package it:
+The Client is served at the root of its own WildFly virtual host as
+`smart-museum-client.war` on `https://smartmuseum.test:8443/`. In the M2
+WildFly deployment it calls the independent API WAR at
+`https://api.smartmuseum.test:8443/api`; CORE and IAM remain internal services.
+Build the complete Client/Admin/middleware set from the repository root with:
 
 ```powershell
-npm ci
-npm test
-npm run build
-mvn -f deployment/pom.xml package
+.\deployment\build-all.ps1
 ```
 
-The WAR is written to `deployment/target/smart-museum-client.war` and contains
-only the production `dist/` bundle plus its WildFly descriptor. The descriptor
-binds it to the `smartmuseum-host` Undertow host. See
-[`deployment/README.md`](../deployment/README.md) for host setup, deployment,
-API-mode CORS configuration, HTTPS requirements, and rollback. The default
-Client mode remains `mock`; set `VITE_DATA_MODE=api` and
-`VITE_API_BASE_URL` before building only when the M1 demonstration requires the
-existing backend connection.
+The Client WAR is written to
+`deployment/target/smart-museum-client.war`; it contains the production `dist/`
+bundle and WildFly descriptors. `build-all.ps1` builds the Client in API mode
+with the HTTPS API URL and restores the calling shell's previous environment
+afterward. The ordinary Vite development default remains mock mode and
+`http://localhost:8080` for local backend testing. For a manual hosted build,
+set `VITE_DATA_MODE=api` and `VITE_API_BASE_URL=https://api.smartmuseum.test:8443/api`
+before `npm run build`, then ensure backend `CORS_ALLOWED_ORIGINS` includes
+the exact Client origin `https://smartmuseum.test:8443`.
+
+The descriptor binds the WAR to Undertow host `smartmuseum-host`. See
+[`deployment/README.md`](../deployment/README.md) for aliases, HTTPS, guarded
+deployment, runtime verification, and the rollback limitation. Rollback is
+available in scripts but its M2 drill has not been run.
 
 ## Project structure
 

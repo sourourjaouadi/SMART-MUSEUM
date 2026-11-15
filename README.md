@@ -23,7 +23,7 @@ The system is organised in four layers:
 
 1. **Edge (IoT) layer:** a BME280 sensor is read over I2C by the `gateway-agent` running on a Raspberry Pi. A second zone can be simulated by the same agent.
 2. **Messaging layer:** the gateway publishes measurements to an MQTT broker (Mosquitto); Node-RED subscribes to the measurement topics, labels each measurement as `real` or `simulated`, and forwards it to the middleware over HTTP.
-3. **Middleware layer:** a Jakarta EE 11 application deployed on WildFly, organised in three modules: `api` (REST resources), `iam` (identity and access management) and `core` (business logic, W3C WoT, persistence with Jakarta Data and Jakarta NoSQL). It stores its data in MongoDB.
+3. **Middleware layer:** three independently deployable Jakarta EE 11 WAR applications on WildFly: API (PWA-facing REST endpoints), IAM (identity and access management), and CORE (museum business logic, WoT, and persistence with Jakarta Data/Jakarta NoSQL). API communicates with IAM and CORE over authenticated HTTP. A shared Contracts JAR carries request/response types.
 4. **Presentation layer:** two React + Vite PWAs, `pwa-client` (CLIENT dashboard) and `pwa-admin` (ADMIN back-office).
 
 ### Technical architecture (current implementation)
@@ -40,10 +40,10 @@ flowchart TB
         NODERED["Node-RED"]
     end
 
-    subgraph MW["Middleware: Jakarta EE 11 on WildFly"]
-        API["api<br/>REST resources under /api"]
-        IAM["iam<br/>login, JWT, BCrypt,<br/>roles and zones"]
-        CORE["core<br/>validation chain, W3C WoT,<br/>Jakarta Data / NoSQL"]
+    subgraph MW["Middleware: three WildFly deployments"]
+        API["API WAR<br/>public REST under /api"]
+        IAM["IAM WAR<br/>login, JWT, BCrypt,<br/>roles and zones"]
+        CORE["CORE WAR<br/>validation, W3C WoT,<br/>Jakarta Data / NoSQL"]
     end
 
     DB[("MongoDB<br/>devices, measurements,<br/>things, users")]
@@ -59,12 +59,10 @@ flowchart TB
     NODERED -->|"HTTP POST /api/ingest/measurements<br/>X-Service-Token"| API
     NODERED -.->|"planned: POST /api/things<br/>(Thing Description announcement)"| API
 
-    CLIENT <-->|"POST /api/auth/login<br/>JSON: access token"| IAM
-    CLIENT <-->|"GET /api/devices, /api/measurements<br/>Authorization: Bearer JWT"| API
-    ADMIN -.->|"planned: REST + Bearer JWT<br/>(approve / reject devices)"| API
+    CLIENT <-->|"REST + Bearer JWT"| API
 
-    API -->|"authentication filter,<br/>role and zone checks"| IAM
-    API -->|"business calls"| CORE
+    API <-->|"HTTP + internal service token"| IAM
+    API <-->|"HTTP + internal service token"| CORE
     CORE <-->|"Jakarta Data / JNoSQL<br/>devices, measurements, things"| DB
     IAM <-->|"Jakarta Data / JNoSQL<br/>users"| DB
 ```
@@ -76,7 +74,7 @@ flowchart TB
 | Solid arrow `A → B` | Data flows from A to B; A initiates the exchange. Implemented in this repository. |
 | Double arrow `A ↔ B` | Request/response: A sends the request, B returns the response. |
 | Dashed arrow | Supported by the receiving side but not yet connected (see section 10). |
-| Box inside *Middleware* | A module of the single WildFly deployment `smart-museum.war`, not a separate server. |
+| Box inside *Middleware* | An independently deployable WAR. API-to-service calls use internal HTTP and a shared service token. |
 
 Notes on the diagram:
 
@@ -89,13 +87,15 @@ Notes on the diagram:
 1. The `gateway-agent` reads the BME280 over I2C and builds one measurement per property (`temperature`, `humidity`, `pressure`), each with a UUID `measurementId` and a UTC `observedAt`.
 2. It publishes each measurement with MQTT QoS 1 on `museum/v1/{zoneId}/{deviceId}/telemetry`. If the network is down, messages are queued and resent.
 3. Node-RED, subscribed to the telemetry topics, sets `source` to `real` or `simulated` and sends the measurement to `POST /api/ingest/measurements` with the `X-Service-Token` header.
-4. In the middleware, the `iam` service-token filter authenticates Node-RED, then the `core` validation chain checks the message: schema, device identity and zone, physical range, approved device (`active`), and property/unit declared in the device's Thing Description.
+4. API authenticates the ingest service token, then calls CORE over authenticated internal HTTP. CORE validates schema, device identity and zone, physical range, approved device (`active`), and property/unit declared in the device's Thing Description.
 5. The measurement is stored in MongoDB through a Jakarta Data repository. A repeated `measurementId` is ignored (HTTP 200), a new one is accepted (HTTP 202).
-6. The client PWA signs in through `POST /api/auth/login`, receives a JWT, and reads devices and measurements of its authorised zones through the REST API.
+6. The Client signs in through API `POST /api/auth/login`. API asks IAM to validate credentials and return a JWT. For protected requests API asks IAM to validate the token and current account state, then calls CORE for authorized device and measurement data.
 
-### Target deployment (planned for sprint S6, not yet in this repository)
+### Production cloud target (not yet implemented)
 
-The architecture document defines the following cloud deployment. The repository does not yet contain the Nginx, TLS or broker configuration files.
+The architecture document defines the following production cloud target. Local
+WildFly HTTPS for development is implemented, but production Nginx, certificate,
+and broker configuration is not present in this repository.
 
 ```mermaid
 flowchart LR
@@ -103,15 +103,15 @@ flowchart LR
     GATEWAY["Raspberry Pi<br/>gateway-agent"]
 
     subgraph VM["Cloud IaaS Linux VM"]
-        NGINX["Nginx reverse proxy<br/>www, api, iam, test"]
-        WILDFLY["WildFly<br/>smart-museum.war"]
+        NGINX["Nginx reverse proxy<br/>Client, Admin, public API"]
+        WILDFLY["WildFly<br/>API, CORE, IAM WARs"]
         BROKER["Mosquitto broker"]
         NODERED["Node-RED"]
         DB[("MongoDB")]
     end
 
     BROWSER <-->|"HTTPS 443"| NGINX
-    NGINX <-->|"HTTP, internal network"| WILDFLY
+    NGINX <-->|"HTTP, internal network to API only"| WILDFLY
     GATEWAY -->|"MQTT over TLS 8883,<br/>client authentication"| BROKER
     BROKER -->|"MQTT, internal network"| NODERED
     NODERED -->|"HTTP POST /api/ingest/measurements,<br/>internal network"| WILDFLY
@@ -169,15 +169,21 @@ Node-RED subscribes to the telemetry topics, adds `source` (`real` or `simulated
 
 ### 4.3 Middleware layer: Jakarta EE (`middleware/`)
 
-A single WildFly deployment, `smart-museum.war`, organised in three modules (`middleware/src/main/java/tn/supcom/museum/`):
+`middleware/` is a Maven parent project that builds a shared Contracts JAR and
+three separately deployed WildFly WARs. Source is split by Maven module; the
+public API artifact remains `smart-museum.war`:
 
 | Module | Responsibility | Main packages |
 |---|---|---|
-| `api` | REST resources under `/api` (devices, measurements, Thing Descriptions, ingestion, health), JAX-RS configuration, CORS, JSON error mapping | `api.rest`, `api.config`, `api.error` |
-| `iam` | Sign-in, user accounts, BCrypt password hashing, JWT issue and validation, authentication filters (user and service token), ADMIN/CLIENT and zone authorization | `iam.security`, `iam.rest`, `iam.entity`, `iam.data`, `iam.repository`, `iam.model` |
-| `core` | Measurement validation chain, W3C WoT Thing Descriptions and device discovery, Jakarta NoSQL entities and Jakarta Data repositories | `core.validation`, `core.wot`, `core.entity`, `core.data`, `core.repository`, `core.model` |
+| `contracts` (JAR) | Shared serialized DTOs, errors, internal-service binding | `tn.supcom.museum.contracts` and shared model packages |
+| `api` (WAR) | Public REST resources, CORS, error mapping, authentication bridge, HTTP clients to CORE/IAM | `api.rest`, `api.config`, `api.error`, `api.service` |
+| `iam` (WAR) | Sign-in, user accounts, BCrypt, JWT issue/validation, active-account, role and zone authorization | `iam.security`, `iam.rest`, `iam.entity`, `iam.data`, `iam.repository` |
+| `core` (WAR) | Measurement validation, W3C WoT, discovery, Jakarta NoSQL entities and Jakarta Data repositories | `core.validation`, `core.wot`, `core.entity`, `core.data`, `core.repository` |
 
-Dependencies go one way: `api` uses `iam` and `core`; `iam` uses `core`; `core` depends on neither.
+The services do not share CDI beans. API calls IAM and CORE over HTTP using
+`X-Internal-Service-Token`; Contracts is packaged into the applications. CORE
+owns `devices`, `measurements`, and `things`; IAM owns `users`; API has no
+MongoDB collections.
 
 **Measurement validation chain** (`core.validation`):
 
@@ -192,7 +198,8 @@ Dependencies go one way: `api` uses `iam` and `core`; `iam` uses `core`; `core` 
 
 **Device discovery** (`core.wot`): a new device is registered as `pending` with its Thing Description, then approved (`active`) or rejected by an ADMIN. Only `active` devices can send measurements.
 
-Details: [`middleware/README.md`](middleware/README.md).
+Details: [`middleware/README.md`](middleware/README.md) and the
+[M2 implementation handoff](DOCS/M2_IMPLEMENTATION_HANDOFF.md).
 
 ### 4.4 Database layer: MongoDB
 
@@ -226,31 +233,24 @@ Details: [`DOCS/pwa-client.md`](DOCS/pwa-client.md) and [`DOCS/ADMIN_PWA.md`](DO
 
 ```text
 SMART-MUSEUM/
-├── gateway-agent/          Raspberry Pi agent (Python): sensor reading, MQTT publishing, simulator
-│   ├── src/gateway_agent/
-│   ├── systemd/
-│   └── tests/
-├── middleware/             Jakarta EE middleware (Maven project, smart-museum.war)
-│   ├── src/main/java/tn/supcom/museum/
-│   │   ├── api/            REST resources, JAX-RS configuration, CORS, error mapping
-│   │   ├── iam/            accounts, JWT, BCrypt, authentication and authorization
-│   │   └── core/           validation, W3C WoT, Jakarta NoSQL entities, Jakarta Data repositories
-│   ├── src/test/java/      unit tests (same module layout)
-│   ├── docker-compose.dev.yml   MongoDB for local development
-│   ├── .env.example
-│   └── pom.xml
-├── pwa-client/             CLIENT PWA (React + Vite)
-├── pwa-admin/              ADMIN PWA prototype (React + Vite, mock data)
-├── contracts/openapi.yaml  REST API contract
-├── postman/                Postman collection
-├── DOCS/                   architecture document, hand-off documents, diagrams
-├── .github/workflows/      CI (middleware-ci)
-├── ATTRIBUTION.md          declaration of AI use and attribution
-└── README.md
+|-- middleware/
+|   |-- pom.xml                 Maven parent aggregator
+|   |-- contracts/              shared DTO/error JAR
+|   |-- core/                   CORE service WAR
+|   |-- iam/                    IAM service WAR
+|   |-- api/                    public API WAR (smart-museum.war)
+|   |-- config/                 non-secret DEV/PROD templates
+|   `-- docker-compose.m2-sandbox.yml
+|-- deployment/                 WildFly build, deploy, HTTPS and acceptance scripts
+|-- pwa-client/                 CLIENT React/Vite app and static WAR
+|-- pwa-admin/                  ADMIN React/Vite app and static WAR (mock data)
+|-- gateway-agent/              Raspberry Pi Python sensor agent
+|-- contracts/openapi.yaml      public API contract
+|-- postman/                    Postman collection
+`-- DOCS/                       architecture, reports and handoffs
 ```
 
-The Node-RED flow is not yet versioned in this repository.
-
+The Node-RED flow is not versioned in this repository.
 ### Team responsibilities
 
 | Member | Scope |
@@ -285,7 +285,7 @@ Base path: `/api`. Full contract: [`contracts/openapi.yaml`](contracts/openapi.y
 ### Examples
 
 ```http
-GET http://localhost:8080/api/health
+GET https://api.smartmuseum.test:8443/api/health
 ```
 
 ```json
@@ -293,7 +293,7 @@ GET http://localhost:8080/api/health
 ```
 
 ```http
-POST http://localhost:8080/api/auth/login
+POST https://api.smartmuseum.test:8443/api/auth/login
 Content-Type: application/json
 
 { "email": "<ACCOUNT_EMAIL>", "password": "<ACCOUNT_PASSWORD>" }
@@ -305,7 +305,7 @@ Content-Type: application/json
 ```
 
 ```http
-GET http://localhost:8080/api/measurements/latest?zoneId=salle-01
+GET https://api.smartmuseum.test:8443/api/measurements/latest?zoneId=salle-01
 Authorization: Bearer <JWT>
 ```
 
@@ -313,134 +313,126 @@ Authorization: Bearer <JWT>
 
 ## 7. Installation and Local Development
 
+For the current M2 local topology and full Windows setup guide, see
+[`deployment/README.md`](deployment/README.md) and the
+[M2 implementation handoff](DOCS/M2_IMPLEMENTATION_HANDOFF.md).
+
 ### Prerequisites
 
-- Git
-- Docker (Docker Desktop, or Docker Engine in WSL/Ubuntu)
-- Java JDK 21 and Apache Maven
-- WildFly 41 or 42
-- Node.js and npm
+- Git, Docker Desktop with Compose, Node.js/npm, Java 21, and Maven.
+- WildFly 42 (WildFly 41 may also be supported by the middleware build).
+- mkcert and OpenSSL for the local development certificate.
+- Windows PowerShell for the repository deployment scripts.
 
-### Step 1: Clone the repository
+### Isolated DEV middleware
 
-```bash
-git clone https://github.com/sourourjaouadi/SMART-MUSEUM.git
-cd SMART-MUSEUM
-```
-
-### Step 2: Start MongoDB
-
-```bash
-docker compose -f middleware/docker-compose.dev.yml up -d
-docker ps          # the museum-mongo container must be "Up"
-```
-
-### Step 3: Build the middleware
-
-```bash
-cd middleware
-mvn clean package  # runs the unit tests and produces target/smart-museum.war
-```
-
-### Step 4: Configure and start WildFly
-
-Copy `middleware/target/smart-museum.war` into `<WILDFLY_HOME>/standalone/deployments/`, then define the variables below **in the terminal that starts WildFly** (see `middleware/.env.example`).
-
-| Variable | Example | Role |
-|---|---|---|
-| `INGEST_SERVICE_TOKEN` | random secret | Service token expected from Node-RED |
-| `JWT_SIGNING_KEY_BASE64` | 32 random bytes, Base64 | JWT signing key (server only) |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:5174` | Allowed PWA origins |
-| `BOOTSTRAP_ADMIN_NAME`, `_EMAIL`, `_PASSWORD` | set together, first start only | Creates the first ADMIN account |
-
-Linux / WSL:
-
-```bash
-export INGEST_SERVICE_TOKEN=dev-token
-export JWT_SIGNING_KEY_BASE64=$(openssl rand -base64 32)
-export CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
-bash <WILDFLY_HOME>/bin/standalone.sh
-```
-
-Windows PowerShell:
+Run from the repository root. The M2 sandbox is separate from the original
+backend Mongo container/database/volume:
 
 ```powershell
-$env:INGEST_SERVICE_TOKEN = "dev-token"
-$env:JWT_SIGNING_KEY_BASE64 = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:CORS_ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:5174"
-& "<WILDFLY_HOME>\bin\standalone.bat"
+docker compose -f middleware/docker-compose.m2-sandbox.yml up -d
+docker exec museum-m2-sandbox-mongo mongosh --quiet --eval "db.adminCommand({ping:1}).ok"
 ```
 
-Wait for `Deployed "smart-museum.war"`.
+If `middleware/config/dev.env` does not exist, initialize it once. The
+initializer creates random secrets and can prompt securely for a sandbox
+bootstrap administrator; do not pass passwords on the command line:
 
-### Step 5: Verify the middleware
-
-```bash
-curl http://localhost:8080/api/health                                       # {"status":"UP","mongo":"UP"}
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/devices   # 401 without a token
+```powershell
+.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin
+.\deployment\prepare-local-https.ps1
+$wildflyHome = 'C:\path\to\wildfly-42.0.0.Final'
+.\deployment\configure-wildfly-https.ps1 -WildFlyHome $wildflyHome
+.\deployment\build-all.ps1
 ```
 
-The middleware creates two active test devices with their Thing Descriptions at start-up (`bme280-01` in `salle-01`, `sim-bme280-02` in `salle-02`); disable with `SEED_DEVICES=false`.
+Configure the three local Windows hosts-file aliases from
+`deployment/README.md` if they are not already present. TLS configuration
+must be ready before WildFly starts. In a dedicated PowerShell window run:
 
-### Step 6: Start the client PWA
-
-```bash
-cd pwa-client
-npm install
-cp .env.example .env    # Windows: copy .env.example .env
-npm run dev             # http://localhost:5173
+```powershell
+.\deployment\start-wildfly.ps1 -Profile dev -WildFlyHome $wildflyHome
 ```
 
-| Variable | Description | Default |
-|---|---|---|
-| `VITE_DATA_MODE` | `mock` (demonstration data) or `api` (real middleware) | `mock` |
-| `VITE_API_BASE_URL` | Middleware base URL | `http://localhost:8080` |
-| `VITE_API_TIMEOUT_MS` | Request timeout | `10000` |
-| `VITE_REFRESH_INTERVAL_MS` | Dashboard refresh interval | `15000` |
-| `VITE_STALE_AFTER_MS` | Age after which a measurement is shown as stale | `900000` |
+After WildFly starts, apply any missing Undertow host resources:
 
-`VITE_*` values are included in the browser bundle: never put a token, password or signing key in them.
-
-### Step 7 (optional): Start the admin PWA
-
-```bash
-cd pwa-admin
-npm install
-npm run dev             # uses the next free port, e.g. http://localhost:5174
+```powershell
+.\deployment\configure-wildfly-hosts.ps1 -WildFlyHome $wildflyHome
 ```
 
-### Step 8 (optional): Run the gateway agent
+Use the documented deployment wrappers and verified current API WAR backup
+when deploying or replacing applications. Do not copy an API WAR over a
+live deployment or use the original `museum` Mongo database for M2 tests.
 
-See [`gateway-agent/README.md`](gateway-agent/README.md) for the Raspberry Pi installation, the simulated zone and the systemd service. The agent needs a reachable MQTT broker, and Node-RED must forward the telemetry to the middleware with the service token.
+### Browser URLs and health
+
+- Client: `https://smartmuseum.test:8443/`
+- Admin: `https://admin.smartmuseum.test:8443/` (currently mock-only)
+- API health: `https://api.smartmuseum.test:8443/api/health`
+- CORE health: `https://localhost:8443/core/health`
+- IAM health: `https://localhost:8443/iam/health`
+
+Use the locally trusted certificate in a normal browser. Windows Schannel
+curl can report a revocation-check limitation for a local mkcert CA; do not
+disable TLS validation. Use OpenSSL with `%LOCALAPPDATA%\mkcert\rootCA.pem`
+as documented in the deployment guide.
+
+### Optional PWA development servers
+
+The Vite Client defaults to mock mode. For local work:
+
+```powershell
+Push-Location pwa-client
+npm ci
+npm test
+npm run dev
+Pop-Location
+```
+
+Set `VITE_DATA_MODE=api` in local frontend configuration only when testing
+against a running backend; its CORS list must include the exact Vite origin.
+Frontend `VITE_*` variables are public and must never contain server secrets.
+
+The Admin Vite app can be started similarly from `pwa-admin`; its actions
+remain mock-only and are not connected to the API.
+
+See [`gateway-agent/README.md`](gateway-agent/README.md) for Raspberry Pi
+installation and sensor integration. The Node-RED flow is not versioned
+here, so the full physical-device-to-Mongo chain is not reproducible from
+this repository alone.
 
 ---
 
 ## 8. Testing and Validation
 
-| Component | Command | Content |
+| Component | Command | Recorded/current evidence |
 |---|---|---|
-| Middleware | `cd middleware && mvn clean package` | 41 unit tests: validation chain, Thing Description validator, affordances, JWT, BCrypt, authorization, security bindings |
-| Gateway agent | `cd gateway-agent && python3 -m pytest -q` | Configuration, measurement building, sensor, MQTT publisher (no Raspberry Pi or broker needed) |
-| Client PWA | `cd pwa-client && npm test && npm run build` | Components, API client, session, history dashboard |
-| Admin PWA | `cd pwa-admin && npm test && npm run build` | Admin views and mock service |
+| Middleware modules | `mvn -f middleware/pom.xml clean verify` | 47 Maven tests passed in the M2 acceptance build (CORE 33, IAM 9, API 5). |
+| Full frontend + middleware build | `.\deployment\build-all.ps1` (PowerShell) | Client Node 40, Client Vitest 10, Admin Vitest 13; five WARs packaged. |
+| Gateway agent | `cd gateway-agent && python3 -m pytest -q` | Gateway unit tests; no Raspberry Pi or broker needed for unit tests. |
+| Runtime integration | `.\deployment\test-m2-runtime.ps1 -ConfirmSandboxWrites` | Auth, roles/zones, CORS, service tokens, Things, measurements, health and deployments; writes only to the isolated DEV sandbox. |
 
-The middleware is also built and tested by GitHub Actions (`middleware-ci`) on every push to `middleware/`.
+For PowerShell run the full build and runtime test as:
 
-**Database inspection:**
-
-```bash
-docker exec -it museum-mongo mongosh museum
+```powershell
+.\deployment\build-all.ps1
+.\deployment\test-m2-runtime.ps1 -ConfirmSandboxWrites
 ```
 
-```javascript
-show collections
-db.devices.find()
-db.measurements.countDocuments()
+The runtime acceptance script creates users, Things, and measurements in
+`museum_m2_sandbox` and leaves the test records there. It refuses to run if
+DEV is not configured for `localhost:27018/museum_m2_sandbox`. Never aim
+these checks at the original `museum` database.
+
+Inspect the sandbox only with:
+
+```powershell
+docker exec -it museum-m2-sandbox-mongo mongosh museum_m2_sandbox
 ```
 
-The API can also be exercised with the Postman collection in `postman/`.
-
-A healthy middleware does not prove that the full IoT chain works: end-to-end validation also requires the gateway, the broker and Node-RED to deliver measurements to `/api/ingest/measurements`.
+A healthy middleware does not prove the physical IoT chain works: the
+gateway, MQTT broker, and Node-RED flow must also be configured. The
+Node-RED flow is not currently versioned in this repository.
 
 ---
 
@@ -452,7 +444,7 @@ A healthy middleware does not prove that the full IoT chain works: end-to-end va
 - **Device trust:** only devices approved by an ADMIN (`active`) can send measurements, and only for the properties and units declared in their Thing Description.
 - **Secrets** (`INGEST_SERVICE_TOKEN`, `JWT_SIGNING_KEY_BASE64`, bootstrap password) are environment variables, outside Git and never logged.
 - **CORS** is limited to the configured PWA origins.
-- In deployment, HTTPS (443) and MQTT over TLS (8883) are required and MongoDB must stay on the internal network (section 2, target deployment).
+- Local WildFly development uses HTTPS on 8443 with a current-user-trusted mkcert certificate. Production still requires managed HTTPS (typically 443), MQTT over TLS (8883), private MongoDB access, and production secrets.
 
 ---
 
@@ -461,7 +453,7 @@ A healthy middleware does not prove that the full IoT chain works: end-to-end va
 ### Implemented
 
 - Gateway agent: BME280 reading, MQTT QoS 1 publishing, status and LWT, reconnection, simulated second zone, systemd service, unit tests.
-- Middleware organised in `api`, `iam` and `core`, deployed on WildFly.
+- Middleware deployed as separate `smart-museum-core.war`, `smart-museum-iam.war`, and `smart-museum.war` applications, with API-to-service HTTP protected by the internal service token.
 - Measurement ingestion with the six-step validation chain and idempotency.
 - Persistence with Jakarta NoSQL entities and Jakarta Data repositories on MongoDB.
 - W3C WoT Thing Descriptions, device discovery with ADMIN approval, RFC 8288 `Link` header to the Thing Description.
@@ -476,7 +468,7 @@ A healthy middleware does not prove that the full IoT chain works: end-to-end va
 - The gateway does not yet publish Thing Description announcements on `.../td`; the middleware endpoint `POST /api/things` is ready.
 - The admin PWA is not yet connected to the middleware.
 - The device status published on MQTT is not yet consumed by the middleware.
-- Cloud deployment (Nginx, HTTPS, MQTT over TLS) is planned for sprint S6.
+- Production cloud deployment (Nginx, production certificates, MQTT over TLS) remains planned; local WildFly HTTPS is implemented and tested.
 
 ---
 
@@ -497,21 +489,18 @@ These items are planned and are not implemented functionality.
 
 Smart Museum connects environmental sensors, an MQTT messaging chain, a Jakarta EE middleware and two PWAs to monitor and protect museum collections. Its layered architecture separates data collection, messaging, middleware processing (`api`, `iam`, `core`), persistence and presentation, so that each part can be developed, tested and secured independently.
 
-## M1 local PWA hosting on WildFly
+## Local M1 + M2 hosting on WildFly
 
-For the M1 local hosting milestone, the existing Client and Admin Vite builds
-can be packaged as two independent static WARs on separate WildFly Undertow
-virtual hosts. Each PWA is served at `/` on its own origin, preserving its
-root-relative assets and isolating its service-worker scope. The backend remains
-the existing `middleware/target/smart-museum.war`; this does not split or
-repackage the middleware.
+The Client and Admin are static WARs on separate Undertow hosts. The
+middleware is split into independently deployable CORE, IAM, and API WARs;
+API remains `smart-museum.war` at `/api`. The local public aliases are
+`smartmuseum.test`, `admin.smartmuseum.test`, and `api.smartmuseum.test`.
+Locally trusted HTTPS, host setup, deployment, verification, and rollback
+instructions are in [`deployment/README.md`](deployment/README.md).
 
-The local defaults are `smartmuseum.test` (Client) and
-`admin.smartmuseum.test` (Admin). Build, configure, deploy, verify, and rollback
-instructions are in [`deployment/README.md`](deployment/README.md). Admin stays
-mock-only, and Client keeps its existing demo/API modes.
-
-This local M1 hosting setup is separate from the documented cloud topology in
-section 2, where Nginx terminates public TLS and serves the PWAs while proxying
-to WildFly. No public production hostnames, certificates, or TLS configuration
-are introduced by the local M1 deployment support.
+The browser Client is connected to the API in the production WAR build.
+Admin remains a mock-data prototype and is not connected to API operations.
+The local WildFly HTTPS topology is development-only. The separate cloud
+architecture earlier in this README remains a target design; production
+DNS, certificate issuance, reverse-proxy routing, secrets, and rollout
+have not been implemented or acceptance-tested.

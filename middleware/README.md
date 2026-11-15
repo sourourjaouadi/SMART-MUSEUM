@@ -81,11 +81,19 @@ middleware/api/target/smart-museum.war
 ```
 
 ## Verifier
-```powershell
-curl.exe --cacert "$env:LOCALAPPDATA\mkcert\rootCA.pem" https://api.smartmuseum.test:8443/api/health
-curl.exe --cacert "$env:LOCALAPPDATA\mkcert\rootCA.pem" https://localhost:8443/core/health
-curl.exe --cacert "$env:LOCALAPPDATA\mkcert\rootCA.pem" https://localhost:8443/iam/health
-```
+Open these health URLs in Edge using the Windows user profile where the local
+mkcert CA is trusted:
+
+- `https://api.smartmuseum.test:8443/api/health`
+- `https://localhost:8443/core/health`
+- `https://localhost:8443/iam/health`
+
+Each should return HTTP 200 with status and Mongo reported as `UP`. For a
+repeatable strict TLS and integration check, use
+`deployment/test-m2-runtime.ps1 -ConfirmSandboxWrites` after confirming the DEV
+database is the isolated sandbox. Windows Schannel curl may return
+`CRYPT_E_NO_REVOCATION_CHECK` for this local CA; do not disable certificate
+validation.
 The CORE and IAM health routes are independent probes; their internal operation
 routes require `X-Internal-Service-Token`.
 Les endpoints `/api/devices` et de mesures exigent maintenant un JWT Bearer; voir
@@ -226,13 +234,19 @@ Les jetons humains ne remplacent pas les jetons de service. `POST /api/things` e
 
 ### Essai local
 
-Apres le bootstrap et le deploiement du WAR, se connecter avec le compte initial :
+Apres le bootstrap et le deploiement, saisir les identifiants du compte ADMIN
+configure localement. Ne pas inscrire les identifiants dans une commande ou un
+fichier versionne :
 
 ```powershell
-$body = @{ email = "admin@museum.example"; password = (Read-Host "Password") } | ConvertTo-Json
-$login = Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/auth/login -ContentType application/json -Body $body
+$email = Read-Host "Admin email"
+$securePassword = Read-Host "Admin password" -AsSecureString
+$password = [Net.NetworkCredential]::new('', $securePassword).Password
+$body = @{ email = $email; password = $password } | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post -Uri https://api.smartmuseum.test:8443/api/auth/login -ContentType application/json -Body $body
 $headers = @{ Authorization = "Bearer $($login.accessToken)" }
-Invoke-RestMethod -Uri http://localhost:8080/api/devices -Headers $headers
+Invoke-RestMethod -Uri https://api.smartmuseum.test:8443/api/devices -Headers $headers
+$password = $null
 ```
 
 Les requetes CLIENT vers des zones non assignees renvoient `403 FORBIDDEN`;
