@@ -138,6 +138,21 @@ test('encodes the latest zone parameter and preserves the API measurement', asyn
   });
 });
 
+test('uses the configured API context path only once', async () => {
+  let requestUrl;
+  const client = createApiClient({
+    baseUrl: 'https://api.smartmuseum.test:8443/api',
+    fetchImpl: async (url) => {
+      requestUrl = url;
+      return jsonResponse({ status: 'UP', mongo: 'UP' });
+    },
+  });
+
+  await client.getHealth();
+
+  assert.equal(requestUrl, 'https://api.smartmuseum.test:8443/api/health');
+});
+
 test('encodes history parameters and omits empty optional filters', async () => {
   let requestUrl;
   const client = createApiClient({
