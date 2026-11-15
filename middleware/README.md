@@ -2,17 +2,22 @@
 
 Jakarta EE 11, WildFly 41/42, Java 21, MongoDB via Jakarta NoSQL et Jakarta Data (Eclipse JNoSQL).
 
-## Organisation du middleware : iam, core, api
-Le code Java est dans `src/main/java/tn/supcom/museum/`, en trois modules :
+## Architecture: three independently deployed applications
+`middleware/pom.xml` builds three WARs and one shared HTTP-contract JAR. The
+contracts JAR contains DTOs and the internal name-binding annotation, not
+service implementations.
 
-| Module | Role | Packages |
+| Module | Role | Routes and implementation |
 |---|---|---|
-| `iam` | Identite et acces : comptes, BCrypt, JWT, filtres d'authentification, roles et zones | `iam.security`, `iam.rest` (login, comptes), `iam.entity`, `iam.data`, `iam.repository`, `iam.model`, `iam.startup` |
-| `core` | Metier : Jakarta NoSQL, Jakarta Data, validation des mesures, W3C WoT, decouverte | `core.entity`, `core.data`, `core.repository`, `core.validation`, `core.wot`, `core.model`, `core.error`, `core.config`, `core.startup` |
-| `api` | Exposition REST sous `/api` : appareils, mesures, Thing Descriptions, ingestion, sante | `api.rest`, `api.config` (JAX-RS, CORS), `api.error` (erreurs JSON) |
+| `contracts` JAR | Shared request/response DTOs and errors, packaged into each WAR | No CDI services or persistence |
+| `core` WAR | Museum business logic and collections `devices`, `measurements`, `things` | Internal `/core/internal/core/*`; `core.entity`, `core.data`, `core.repository`, `core.validation`, `core.wot`, `core.startup` |
+| `iam` WAR | Accounts, collection `users`, BCrypt, JWT, role and zone checks | Internal `/iam/internal/iam/*`; `iam.security`, `iam.entity`, `iam.data`, `iam.repository`, `iam.startup` |
+| `api` WAR | Public REST endpoints, CORS and HTTP clients to CORE/IAM | Public routes remain `/api/*`; final artifact is `smart-museum.war` |
 
-Dependances : `api` -> `iam`, `core` ; `iam` -> `core` ; `core` ne depend ni de `api` ni de `iam`.
-Les URL de l'API (`/api/...`) sont inchangees.
+The applications communicate through HTTP authenticated with
+`X-Internal-Service-Token`; there is no CDI injection across deployments. The
+public API preserves its current URLs and responses. CORE and IAM contexts are
+internal service routes and must not be routed to public clients.
 
 ## Local DEV middleware (Windows / PowerShell)
 
@@ -35,6 +40,16 @@ local; `.env` files are not automatically loaded by WildFly. The repo
 `.gitignore` excludes `middleware/config/*.env`. Omit `-CreateBootstrapAdmin`
 to skip account creation.
 
+If `dev.env` was created before the independent services were added, update
+only its new internal token with:
+
+```powershell
+.\deployment\Set-InternalServiceToken.ps1
+```
+
+The script preserves the existing JWT and ingest secrets. Use `-Rotate` only
+when deliberately rotating the inter-service token in the same DEV process.
+
 ```powershell
 $env:WILDFLY_HOME = 'C:\wildfly-41.0.1.Final\wildfly-42.0.0.Final'
 .\deployment\start-wildfly.ps1 -Profile dev
@@ -42,8 +57,10 @@ $env:WILDFLY_HOME = 'C:\wildfly-41.0.1.Final\wildfly-42.0.0.Final'
 
 `start-wildfly.ps1` imports the ignored `middleware/config/dev.env` into its
 process, validates the profile, refuses occupied HTTP/management ports, and
-starts WildFly in the current console. The API validates the complete runtime
-configuration before either startup observer can touch MongoDB. Use
+starts WildFly in the current console. API validates its service URLs, CORS and
+service tokens; CORE validates its Mongo/seed settings and IAM validates its
+Mongo/JWT/bootstrap settings. CORE and IAM each connect
+to the isolated DEV database; only CORE seeds museum devices. Use
 `SEED_DEVICES=true` only with this isolated DEV profile.
 
 Build all three independently packaged WARs from the repo root:
@@ -58,24 +75,41 @@ middleware parent `clean verify`. Expected artifacts are:
 ```text
 pwa-client/deployment/target/smart-museum-client.war
 pwa-admin/deployment/target/smart-museum-admin.war
+middleware/core/target/smart-museum-core.war
+middleware/iam/target/smart-museum-iam.war
 middleware/api/target/smart-museum.war
 ```
 
-The middleware Maven reactor produces only the API WAR. Client and Admin WARs
-remain in their existing Vite/Maven pipelines.
-
 ## Verifier
 ```powershell
-curl.exe http://localhost:8080/api/health
+curl.exe --cacert "$env:LOCALAPPDATA\mkcert\rootCA.pem" https://api.smartmuseum.test:8443/api/health
+curl.exe --cacert "$env:LOCALAPPDATA\mkcert\rootCA.pem" https://localhost:8443/core/health
+curl.exe --cacert "$env:LOCALAPPDATA\mkcert\rootCA.pem" https://localhost:8443/iam/health
 ```
+The CORE and IAM health routes are independent probes; their internal operation
+routes require `X-Internal-Service-Token`.
 Les endpoints `/api/devices` et de mesures exigent maintenant un JWT Bearer; voir
 la section Authentification ci-dessous.
+
+For local HTTPS setup, follow `deployment/README.md`. Public browser origins
+use port 8443: Client `https://smartmuseum.test:8443/`, Admin
+`https://admin.smartmuseum.test:8443/`, and API
+`https://api.smartmuseum.test:8443/api`. CORE and IAM are internal services;
+their health probes are available at `https://localhost:8443/core/health` and
+`https://localhost:8443/iam/health`, but their business routes are not public.
+HTTP requests to the public hosts redirect to HTTPS. Do not disable certificate
+validation if Windows curl reports its revocation-check limitation with the
+local mkcert certificate; use a browser with the installed Current User CA or
+OpenSSL with the local root CA file.
 
 ## Variables
 | Variable | Defaut | Role |
 |---|---|---|
 | JNOSQL_MONGODB_HOST | required; DEV is localhost:27018 | Host MongoDB (Jakarta NoSQL, MicroProfile Config) |
 | JNOSQL_DOCUMENT_DATABASE | required; DEV is museum_m2_sandbox | Database name |
+| CORE_SERVICE_URL | required; DEV is http://localhost:8080/core | CORE internal service base URL |
+| IAM_SERVICE_URL | required; DEV is http://localhost:8080/iam | IAM internal service base URL |
+| INTER_SERVICE_TOKEN | required, >= 32 characters | API-to-CORE/IAM authentication secret |
 | INGEST_SERVICE_TOKEN | required, >= 32 characters | Node-RED -> middleware token |
 | CORS_ALLOWED_ORIGINS | required | Exact PWA origins, comma separated |
 | JWT_SIGNING_KEY_BASE64 | (obligatoire, 32 octets aleatoires minimum) | Cle HMAC JWT Base64, uniquement cote serveur |
@@ -85,6 +119,7 @@ la section Authentification ci-dessous.
 | MQTT_BROKER_URI | required | MQTT base used in seeded Thing Description forms |
 | SEED_DEVICES | required; DEV true, PROD false | Seeds two sample devices only in DEV |
 | SMART_MUSEUM_ENV | required: dev or prod | Startup safety profile |
+| TLS_KEYSTORE_PATH / TLS_KEYSTORE_PASSWORD | required for local WildFly HTTPS | Local PKCS#12 path and password; generated/configured by `deployment/prepare-local-https.ps1`, stored only in ignored `dev.env` |
 
 `middleware/config/dev.properties` documents non-secret DEV properties;
 `prod.properties.example` and `prod.env.example` are templates only. The
@@ -103,8 +138,9 @@ JNoSQL 1.1.20 requires Jakarta Data 1.0.2. The Maven dependency is aligned to
   `MeasurementEntity` (measurements), `ThingEntity` (things).
 - Repositories Jakarta Data (`@Repository`, `BasicRepository`, `@Insert`, requetes par nom de methode)
   dans `core/data/`, implementes a l'execution par Eclipse JNoSQL 1.1 (Jakarta Data 1.0).
-- Configuration dans `src/main/resources/META-INF/microprofile-config.properties`
-  (MicroProfile Config fourni par WildFly).
+- Configuration per application in `core/src/main/resources/META-INF/` and
+  `iam/src/main/resources/META-INF/microprofile-config.properties` (MicroProfile
+  Config supplied by WildFly).
 - Les `_id` MongoDB sont les identifiants metier (deviceId, measurementId). Aucun
   effacement ou changement de volume n'est requis pour la modularisation M2.
 

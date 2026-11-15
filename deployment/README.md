@@ -1,8 +1,9 @@
-# WildFly static PWA deployments (M1)
+# Smart Museum local WildFly deployment (M1 + M2)
 
-This local M1 topology deploys each Vite production bundle as an independent
-static WAR on a separate Undertow host. The modular Java backend is the
-`middleware/api/target/smart-museum.war` deployment. This section describes the
+This local topology deploys each Vite production bundle as an independent
+static WAR on a separate Undertow host. The modular Java backend consists of
+`smart-museum-core.war`, `smart-museum-iam.war`, and the public
+`middleware/api/target/smart-museum.war`. This section describes the
 M1 WildFly hosting decision; the cloud architecture elsewhere in the project
 continues to document Nginx as the public TLS reverse proxy.
 
@@ -12,7 +13,20 @@ continues to document Nginx as the public TLS reverse proxy.
 |---|---|---|---|---|
 | Client | `smart-museum-client.war` | `/` | `smartmuseum-host` | `smartmuseum.test` |
 | Admin | `smart-museum-admin.war` | `/` | `admin-smartmuseum-host` | `admin.smartmuseum.test` |
-| Middleware API | `middleware/api/target/smart-museum.war` | `/` | `api-smartmuseum-host` | `api.smartmuseum.test` |
+| CORE service | `middleware/core/target/smart-museum-core.war` | `/core` | `default-host` | internal only |
+| IAM service | `middleware/iam/target/smart-museum-iam.war` | `/iam` | `default-host` | internal only |
+| Middleware API | `middleware/api/target/smart-museum.war` | `/api` | `api-smartmuseum-host` | `api.smartmuseum.test` |
+
+CORE and IAM endpoints require `X-Internal-Service-Token`; the public reverse
+proxy must not route those contexts to clients. API calls them through
+`CORE_SERVICE_URL` and `IAM_SERVICE_URL`. DEV defaults are
+`http://localhost:8080/core` and `http://localhost:8080/iam`; PROD URLs must use
+HTTPS with normal certificate verification.
+
+The service health probes are `/core/health`, `/iam/health`, and the existing
+public `/api/health`. CORE and IAM health endpoints only report service and
+Mongo availability; their internal business routes still require the shared
+service token.
 
 The aliases are local development defaults, not production domains. Each PWA
 must remain on its own origin because its assets and service worker use the
@@ -29,11 +43,12 @@ the CLI file associates the host aliases with those resources.
   deployment. Keep the management interface private.
 
 The checked local WildFly 42 config has Undertow server `default-server`,
-default host `default-host` with alias `localhost`, M1 client and admin hosts,
-and HTTP/HTTPS listeners. The API host is added by the M2 CLI file.
-The supplied CLI adds only the two named hosts; it does not edit listeners,
-TLS, `default-host`, or management interfaces. Inspect the actual installation
-before use.
+default host `default-host` with alias `localhost`, Client, Admin, and API
+hosts, and HTTP/HTTPS listeners. The local development HTTPS listener uses a
+separate environment-backed M2 keystore and SSL context; the original
+`applicationKS`/`applicationKM`/`applicationSSC` resources are preserved.
+Management and application listeners are bound to loopback for this local
+setup. Inspect the actual installation before use.
 
 ## Build and package
 
@@ -97,21 +112,33 @@ $wildflyHome = 'C:\path\to\wildfly'
 .\deployment\configure-wildfly-hosts.ps1 -WildFlyHome $wildflyHome
 ```
 
-The API WAR descriptor selects `api-smartmuseum-host` and root context `/`.
-The M2 CLI only creates that named Undertow host if absent; it does not edit
-listeners, TLS, existing hosts, or the management interface. Inspect the
-resulting host resource and alias before deploying.
+The API WAR descriptor selects `api-smartmuseum-host` and context `/api`.
+The M2 CLI creates that named Undertow host only if absent; it does not replace
+an existing host. Inspect the resulting host resource and alias before
+deploying.
 
 The checked local WildFly configuration includes the default deployment
-scanner for `standalone/deployments`. Copy each WAR there independently:
+scanner for `standalone/deployments`. After building all middleware WARs, deploy
+CORE, IAM, then API. Before replacing API, make a verified copy of the API WAR
+currently deployed (the script requires the backup to match the current WAR):
 
 ```powershell
-.\deployment\deploy-client.ps1 -WildFlyHome $wildflyHome -ReplaceExisting
-.\deployment\deploy-admin.ps1 -WildFlyHome $wildflyHome -ReplaceExisting
-.\deployment\deploy-api.ps1 -WildFlyHome $wildflyHome `
-  -VerifiedApiBackup 'C:\wildfly-m2-backups\smart-museum-before-m2-20261115-092936.war' `
-  -ExpectedApiBackupSha256 '<verified SHA-256>' -ReplaceExisting
+$deployments = Join-Path $wildflyHome 'standalone\deployments'
+$backupDir = Join-Path $wildflyHome 'standalone\m2-backups'
+New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+$apiBackup = Join-Path $backupDir ("smart-museum-before-update-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.war')
+Copy-Item -LiteralPath (Join-Path $deployments 'smart-museum.war') -Destination $apiBackup
+$apiHash = (Get-FileHash -LiteralPath $apiBackup -Algorithm SHA256).Hash
+if ($apiHash -ne (Get-FileHash (Join-Path $deployments 'smart-museum.war') -Algorithm SHA256).Hash) { throw 'API backup verification failed.' }
+
+.\deployment\deploy-middleware.ps1 -WildFlyHome $wildflyHome `
+  -VerifiedApiBackup $apiBackup -ExpectedApiBackupSha256 $apiHash -ReplaceExisting
 ```
+
+`deploy-core.ps1` and `deploy-iam.ps1` are also available for independent
+updates after their WARs have been built. Deploying the PWAs remains separate:
+use `deploy-client.ps1` and `deploy-admin.ps1` when those artifacts need an
+update.
 
 Each replacement first creates and hashes a timestamped copy under
 `standalone/m2-backups`. API replacement additionally requires the current WAR
@@ -126,33 +153,108 @@ the context roots are independent. The scanner should create
 `smart-museum-client.war.deployed` and `smart-museum-admin.war.deployed`; check
 the log for both deployments before making HTTP requests.
 
+## Local HTTPS setup and startup
+
+Run from the repository root in Windows PowerShell. The checked machine
+already has the three host aliases above. If they are missing elsewhere, add
+them manually to the Windows hosts file from an elevated editor; the project
+does not modify that file.
+
+Prepare the isolated DEV environment and local certificate (initialize only
+if `middleware/config/dev.env` does not already exist):
+
+```powershell
+.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin
+.\deployment\prepare-local-https.ps1
+$wildflyHome = 'C:\wildfly-41.0.1.Final\wildfly-42.0.0.Final'
+.\deployment\configure-wildfly-https.ps1 -WildFlyHome $wildflyHome
+```
+
+`prepare-local-https.ps1` uses mkcert and OpenSSL, stores its certificate and
+password-protected PKCS#12 file under `%LOCALAPPDATA%\SmartMuseum\M2-TLS`,
+and keeps the keystore password in ignored `middleware/config/dev.env`. It
+checks the local CA trust, certificate names, and keystore password without
+printing secrets. The CA is trusted for the current Windows user. The WildFly
+TLS helper keeps the original application TLS resources and creates a
+timestamped, hash-verified `standalone.xml` backup before a needed change.
+Stop WildFly cleanly before changing this configuration; the helper refuses
+to edit it while management port 9990 is listening.
+
+Build and start WildFly in its own PowerShell window:
+
+```powershell
+.\deployment\build-all.ps1
+.\deployment\start-wildfly.ps1 -Profile dev -WildFlyHome $wildflyHome
+```
+
+For updated middleware, inspect the current API WAR and a rollback copy first.
+Then deploy CORE, IAM, API in that order with `deploy-middleware.ps1` and its
+required verified API backup path and SHA-256. Updated Client/Admin WARs can
+be deployed separately with `deploy-client.ps1` and `deploy-admin.ps1`. These
+scripts require `-ReplaceExisting` before replacing a deployment. Do not copy
+WAR files over a live deployment or point DEV at the original `museum`
+database.
+
+DEV must target only `localhost:27018/museum_m2_sandbox`; its dedicated
+container is `museum-m2-sandbox-mongo` with volume
+`museum-m2-sandbox-data`. It does not replace or mount the original
+`museum-mongo` / `backend_mongo-data` database.
+
 ## Verify
 
-Over HTTP, the static content can be checked at:
+The public applications use HTTPS port 8443. Confirm HTTP redirects to HTTPS,
+then check the sites at:
 
 ```text
-http://smartmuseum.test:8080/
-http://admin.smartmuseum.test:8080/
+https://smartmuseum.test:8443/
+https://admin.smartmuseum.test:8443/
+https://api.smartmuseum.test:8443/api/health
 ```
 
 Check each root, manifest, service worker, one built asset, and an icon. They
 must return the correct app and usable MIME types, including
 `application/manifest+json` for the manifest. The Admin's `#dashboard`
 navigation should survive reload; its actions remain mock-only. The Client
-should load in its existing demo mode. The API health endpoint is
-`http://api.smartmuseum.test:8080/api/health` once its virtual host is configured.
-The API WAR is not mapped to `default-host` by this configuration.
+build uses the public API. The API WAR is not mapped to `default-host`.
+CORE and IAM health checks are internal-only at
+`https://localhost:8443/core/health` and `https://localhost:8443/iam/health`;
+their business routes must not be exposed on public hosts. All three health
+responses should report service and Mongo as `UP`.
 
-HTTPS is required for service-worker/PWA installation on non-local hostnames.
-The local `.test` aliases are not secure contexts over plain HTTP. Browser
-installation and offline checks therefore require a locally trusted
-certificate whose SAN covers both hostnames and an HTTPS listener configured
-to use it. This setup does not create or install certificates. Do not treat
-HTTP static response tests as proof of installation or offline behavior.
+The local certificate SAN covers Client, Admin, API, localhost and 127.0.0.1.
+Open each PWA in a normal browser profile and check for certificate errors.
+Verify the Client manifest, service-worker registration, API health fetch, and
+browser console for mixed-content or CORS errors. Windows curl with Schannel
+may report `CRYPT_E_NO_REVOCATION_CHECK` for this local mkcert certificate
+because it has no revocation endpoint. Do not bypass certificate checks. To
+test from PowerShell with strict chain and host validation, use OpenSSL's root:
 
-For Client API mode, set `VITE_API_BASE_URL` before building and configure the
-backend's `CORS_ALLOWED_ORIGINS` with the exact Client origin. Never put secrets
-in Vite variables. Admin remains disconnected from the API.
+```powershell
+$ca = Join-Path $env:LOCALAPPDATA 'mkcert\rootCA.pem'
+curl.exe --cacert $ca https://api.smartmuseum.test:8443/api/health
+```
+
+`deployment/build-all.ps1` configures the Client with the HTTPS API URL and
+API data mode for its production build. Configure the backend's
+`CORS_ALLOWED_ORIGINS` with the exact Client origin; never put secrets in Vite
+variables. Admin remains disconnected from the API.
+
+The repeatable M2 integration/acceptance checks are in
+`deployment/test-m2-runtime.ps1`. They cover TLS verification, health probes,
+both PWAs, API/CORS, authentication and role/zone authorization, internal
+service authentication, Thing Description registration, measurement
+validation, and all five deployment statuses. The test writes users and museum
+records **only** to the isolated DEV database. Explicitly confirm that sandbox
+before running:
+
+```powershell
+.\deployment\test-m2-runtime.ps1 -ConfirmSandboxWrites
+```
+
+The script uses a protected local acceptance-admin credential file under
+`%LOCALAPPDATA%\SmartMuseum\M2-TLS`; it does not print credential values.
+It leaves its test records in the sandbox. Recorded runtime results and
+limitations are in `middleware/M2_RUNTIME_ACCEPTANCE.md`.
 
 ## Undeploy and rollback
 
@@ -175,3 +277,7 @@ Then remove only the confirmed task-created resource using the corresponding
 `:remove` operation. Do not remove `default-host`, the backend WAR, listeners,
 TLS resources, or management settings. Manually remove the two hosts-file
 lines only if you added them for this task.
+
+Verified rollback backups and a guarded rollback procedure exist, but an M2
+rollback drill was not run at the operator's request. Treat rollback as
+unverified until a separate drill is approved and completed.
