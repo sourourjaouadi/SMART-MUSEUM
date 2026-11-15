@@ -2,7 +2,6 @@ package tn.supcom.museum.iam.security;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import tn.supcom.museum.core.error.ApiException;
 import tn.supcom.museum.iam.entity.UserEntity;
 import tn.supcom.museum.iam.model.LoginRequest;
 import tn.supcom.museum.iam.repository.UserRepository;
@@ -64,7 +63,7 @@ class UserAuthenticationServiceTest {
         assertEquals("ADMIN", response.user().role());
         assertEquals(user.userId, response.user().userId());
         assertEquals(900, response.expiresIn());
-        assertThrows(ApiException.class, () -> authentication.provision("Other", "admin@museum.test",
+        assertThrows(IamException.class, () -> authentication.provision("Other", "admin@museum.test",
                 "another-long-passphrase", "ADMIN", List.of()));
     }
 
@@ -75,15 +74,15 @@ class UserAuthenticationServiceTest {
         LoginRequest request = new LoginRequest();
         request.email = user.email;
         request.password = "wrong-password";
-        assertThrows(ApiException.class, () -> authentication.login(request));
+        assertThrows(IamException.class, () -> authentication.login(request));
 
         user.status = "disabled";
         request.password = "a-long-client-passphrase";
-        assertThrows(ApiException.class, () -> authentication.login(request));
-        assertThrows(ApiException.class, () -> authentication.requireActiveUser(user.userId));
+        assertThrows(IamException.class, () -> authentication.login(request));
+        assertThrows(IamException.class, () -> authentication.requireActiveUser(user.userId));
 
         request.email = "not-an-email";
-        assertThrows(ApiException.class, () -> authentication.login(request));
+        assertThrows(IamException.class, () -> authentication.login(request));
     }
 
     @Test
@@ -100,7 +99,7 @@ class UserAuthenticationServiceTest {
         request.email = "nobody@museum.test";
         request.password = "a-long-client-passphrase";
 
-        ApiException e = assertThrows(ApiException.class, () -> authentication.login(request));
+        IamException e = assertThrows(IamException.class, () -> authentication.login(request));
         assertEquals(401, e.getStatus());
         assertEquals(1, verifyCalls[0], "BCrypt doit tourner meme si l'email n'existe pas");
     }

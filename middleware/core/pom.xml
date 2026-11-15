@@ -10,10 +10,11 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
   <artifactId>smart-museum-core</artifactId>
-  <packaging>jar</packaging>
+  <packaging>war</packaging>
   <name>Smart Museum CORE</name>
 
   <dependencies>
+    <dependency><groupId>tn.supcom.museum</groupId><artifactId>smart-museum-contracts</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>jakarta.platform</groupId>
       <artifactId>jakarta.jakartaee-api</artifactId>
@@ -39,4 +40,5 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+  <build><finalName>smart-museum-core</finalName></build>
 </project>

@@ -11,6 +11,7 @@
   <name>Smart Museum Middleware</name>
 
   <modules>
+    <module>contracts</module>
     <module>core</module>
     <module>iam</module>
     <module>api</module>

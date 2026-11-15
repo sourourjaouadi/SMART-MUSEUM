@@ -17,6 +17,29 @@ public final class RuntimeConfiguration {
         validate(System.getenv());
     }
 
+    /** Validation owned by the independently deployed CORE application. */
+    public static void validateCore() {
+        Map<String, String> env = System.getenv();
+        String profile = required(env, "SMART_MUSEUM_ENV").toLowerCase(Locale.ROOT);
+        if (!ALLOWED_PROFILES.contains(profile)) throw new IllegalStateException("SMART_MUSEUM_ENV must be dev or prod");
+        String host = required(env, "JNOSQL_MONGODB_HOST"), database = required(env, "JNOSQL_DOCUMENT_DATABASE");
+        if (profile.equals("dev") && (!(host.equalsIgnoreCase("localhost:27018") || host.equals("127.0.0.1:27018"))
+                || !database.equals("museum_m2_sandbox")))
+            throw new IllegalStateException("DEV must use the isolated MongoDB sandbox on port 27018 and database museum_m2_sandbox");
+        if (profile.equals("prod") && (host.toLowerCase(Locale.ROOT).contains(":27018")
+                || database.equalsIgnoreCase("museum_m2_sandbox") || database.equalsIgnoreCase("museum")))
+            throw new IllegalStateException("PROD must not use the M2 development MongoDB sandbox or museum database");
+        if (required(env, "INTER_SERVICE_TOKEN").length() < 32)
+            throw new IllegalStateException("INTER_SERVICE_TOKEN must contain at least 32 characters");
+        String seed = required(env, "SEED_DEVICES");
+        if (!seed.equalsIgnoreCase("true") && !seed.equalsIgnoreCase("false")) throw new IllegalStateException("SEED_DEVICES must be true or false");
+        if (profile.equals("prod") && seed.equalsIgnoreCase("true")) throw new IllegalStateException("SEED_DEVICES must be false in PROD");
+        String mqtt = required(env, "MQTT_BROKER_URI");
+        URI broker = URI.create(mqtt);
+        if (broker.getHost() == null || !("mqtt".equals(broker.getScheme()) || "mqtts".equals(broker.getScheme())))
+            throw new IllegalStateException("MQTT_BROKER_URI must be an mqtt:// or mqtts:// URI");
+    }
+
     static void validate(Map<String, String> env) {
         String profile = required(env, "SMART_MUSEUM_ENV").toLowerCase(Locale.ROOT);
         if (!ALLOWED_PROFILES.contains(profile)) {

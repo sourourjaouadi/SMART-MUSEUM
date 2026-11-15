@@ -4,9 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.Initialized;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import tn.supcom.museum.core.config.Env;
-import tn.supcom.museum.core.config.RuntimeConfiguration;
-import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.iam.security.IamException;
 import tn.supcom.museum.iam.repository.UserRepository;
 import tn.supcom.museum.iam.security.UserAuthenticationService;
 
@@ -24,10 +22,10 @@ public class BootstrapAdmin {
     UserAuthenticationService authentication;
 
     void onStart(@Observes @Initialized(ApplicationScoped.class) Object init) {
-        RuntimeConfiguration.validate();
-        String name = Env.get("BOOTSTRAP_ADMIN_NAME", "");
-        String email = Env.get("BOOTSTRAP_ADMIN_EMAIL", "");
-        String password = Env.get("BOOTSTRAP_ADMIN_PASSWORD", "");
+        tn.supcom.museum.iam.config.IamRuntimeConfiguration.validate();
+        String name = System.getenv().getOrDefault("BOOTSTRAP_ADMIN_NAME", "");
+        String email = System.getenv().getOrDefault("BOOTSTRAP_ADMIN_EMAIL", "");
+        String password = System.getenv().getOrDefault("BOOTSTRAP_ADMIN_PASSWORD", "");
         int configured = (name.isBlank() ? 0 : 1) + (email.isBlank() ? 0 : 1) + (password.isBlank() ? 0 : 1);
         if (configured == 0) return;
         if (configured != 3) {
@@ -44,7 +42,7 @@ public class BootstrapAdmin {
         try {
             authentication.provision(name, email, password, "ADMIN", List.of());
             LOG.info("Initial administrator account provisioned");
-        } catch (ApiException e) {
+        } catch (IamException e) {
             throw new IllegalStateException("Initial administrator provisioning failed: " + e.getMessage(), e);
         }
     }

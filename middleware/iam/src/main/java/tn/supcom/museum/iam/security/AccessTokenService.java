@@ -6,8 +6,7 @@ import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
-import tn.supcom.museum.core.config.Env;
-import tn.supcom.museum.core.config.RuntimeConfiguration;
+import tn.supcom.museum.iam.config.IamRuntimeConfiguration;
 
 import javax.crypto.SecretKey;
 import java.time.Instant;
@@ -21,8 +20,8 @@ public class AccessTokenService {
 
     @PostConstruct
     void initialize() {
-        RuntimeConfiguration.validate();
-        String encodedKey = Env.get("JWT_SIGNING_KEY_BASE64", "");
+        IamRuntimeConfiguration.validate();
+        String encodedKey = System.getenv().getOrDefault("JWT_SIGNING_KEY_BASE64", "");
         if (encodedKey.isBlank()) {
             throw new IllegalStateException("JWT_SIGNING_KEY_BASE64 must be configured");
         }
@@ -35,10 +34,10 @@ public class AccessTokenService {
         if (keyBytes.length < 32) {
             throw new IllegalStateException("JWT signing key must contain at least 32 random bytes");
         }
-        String configuredIssuer = Env.get("JWT_ISSUER", "smart-museum");
+        String configuredIssuer = System.getenv().getOrDefault("JWT_ISSUER", "smart-museum");
         long configuredExpiration;
         try {
-            configuredExpiration = Long.parseLong(Env.get("JWT_ACCESS_TOKEN_SECONDS", "900"));
+            configuredExpiration = Long.parseLong(System.getenv().getOrDefault("JWT_ACCESS_TOKEN_SECONDS", "900"));
         } catch (NumberFormatException e) {
             throw new IllegalStateException("JWT_ACCESS_TOKEN_SECONDS must be an integer", e);
         }

@@ -10,15 +10,11 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
   <artifactId>smart-museum-iam</artifactId>
-  <packaging>jar</packaging>
+  <packaging>war</packaging>
   <name>Smart Museum IAM</name>
 
   <dependencies>
-    <dependency>
-      <groupId>tn.supcom.museum</groupId>
-      <artifactId>smart-museum-core</artifactId>
-      <version>${project.version}</version>
-    </dependency>
+    <dependency><groupId>tn.supcom.museum</groupId><artifactId>smart-museum-contracts</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>jakarta.platform</groupId>
       <artifactId>jakarta.jakartaee-api</artifactId>
@@ -27,6 +23,10 @@
       <groupId>jakarta.data</groupId>
       <artifactId>jakarta.data-api</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jnosql.databases</groupId><artifactId>jnosql-mongodb</artifactId>
+      <exclusions><exclusion><groupId>jakarta.data</groupId><artifactId>jakarta.data-api</artifactId></exclusion></exclusions>
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
@@ -52,4 +52,5 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+  <build><finalName>smart-museum-iam</finalName></build>
 </project>

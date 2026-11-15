@@ -2,7 +2,6 @@ package tn.supcom.museum.iam.security;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import tn.supcom.museum.core.error.ApiException;
 import tn.supcom.museum.iam.entity.UserEntity;
 import tn.supcom.museum.iam.model.LoginRequest;
 import tn.supcom.museum.iam.model.LoginResponse;
@@ -19,6 +18,7 @@ import java.util.regex.Pattern;
 public class UserAuthenticationService {
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private static final List<String> ROLES = List.of("ADMIN", "CLIENT");
+    private static final java.util.regex.Pattern ID = java.util.regex.Pattern.compile("^[A-Za-z0-9._-]{1,64}$");
 
     @Inject
     UserRepository users;
@@ -43,7 +43,7 @@ public class UserAuthenticationService {
         if (request == null || request.email == null || request.password == null
                 || !EMAIL.matcher(request.email.trim()).matches()
                 || request.password.isEmpty()) {
-            throw ApiException.badRequest("Valid email and password are required");
+            throw IamException.badRequest("Valid email and password are required");
         }
         UserEntity user = users.findByEmail(request.email).orElse(null);
         // BCrypt tourne toujours, meme pour un email inconnu : le temps de reponse
@@ -51,7 +51,7 @@ public class UserAuthenticationService {
         String hash = user != null ? user.passwordHash : dummyHash();
         boolean passwordOk = passwords.verify(request.password, hash);
         if (user == null || !"active".equals(user.status) || !passwordOk) {
-            throw ApiException.unauthorized("Invalid email or password");
+            throw IamException.unauthorized("Invalid email or password");
         }
         AccessTokenService.IssuedToken issued = tokens.issue(user.userId, user.role);
         UserAccount account = UserRepository.toAccount(user);
@@ -61,9 +61,9 @@ public class UserAuthenticationService {
     public UserEntity requireActiveUser(String userId) {
         UserEntity user = users.findByUserId(userId)
                 .filter(candidate -> "active".equals(candidate.status))
-                .orElseThrow(() -> ApiException.unauthorized("Invalid or expired access token"));
+                .orElseThrow(() -> IamException.unauthorized("Invalid or expired access token"));
         if (!ROLES.contains(user.role)) {
-            throw ApiException.unauthorized("Invalid or expired access token");
+            throw IamException.unauthorized("Invalid or expired access token");
         }
         return user;
     }
@@ -72,7 +72,7 @@ public class UserAuthenticationService {
         validateAccount(name, email, password, role, zones);
         String normalizedEmail = UserRepository.normalizeEmail(email);
         if (users.findByEmail(normalizedEmail).isPresent()) {
-            throw ApiException.conflict("An account with this email already exists");
+            throw IamException.conflict("An account with this email already exists");
         }
         UserEntity user = new UserEntity();
         user.emailKey = normalizedEmail;
@@ -88,7 +88,7 @@ public class UserAuthenticationService {
         } catch (RuntimeException e) {
             // Mongo's _id is the normalized email, so concurrent duplicate provisioning is rejected.
             if (users.findByEmail(normalizedEmail).isPresent()) {
-                throw ApiException.conflict("An account with this email already exists");
+                throw IamException.conflict("An account with this email already exists");
             }
             throw e;
         }
@@ -102,8 +102,8 @@ public class UserAuthenticationService {
                 || password.getBytes(StandardCharsets.UTF_8).length > 72
                 || role == null || !ROLES.contains(role)
                 || zones == null || new HashSet<>(zones).size() != zones.size()
-                || zones.stream().anyMatch(z -> z == null || !tn.supcom.museum.core.validation.SchemaHandler.ID.matcher(z).matches())) {
-            throw ApiException.badRequest("Invalid user account fields");
+                || zones.stream().anyMatch(z -> z == null || !ID.matcher(z).matches())) {
+            throw IamException.badRequest("Invalid user account fields");
         }
     }
 }

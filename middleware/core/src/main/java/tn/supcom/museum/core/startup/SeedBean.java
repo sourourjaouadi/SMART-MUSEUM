@@ -32,7 +32,7 @@ public class SeedBean {
     ThingRepository things;
 
     void onStart(@Observes @Initialized(ApplicationScoped.class) Object init) {
-        RuntimeConfiguration.validate();
+        RuntimeConfiguration.validateCore();
         if (!"true".equalsIgnoreCase(Env.get("SEED_DEVICES", "true"))) return;
         String broker = Env.get("MQTT_BROKER_URI", "mqtt://localhost:1883");
         try (Jsonb jsonb = JsonbBuilder.create()) {
