@@ -19,14 +19,12 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
-import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.api.error.ApiException;
 import tn.supcom.museum.core.model.Device;
-import tn.supcom.museum.core.repository.DeviceRepository;
-import tn.supcom.museum.core.validation.SchemaHandler;
-import tn.supcom.museum.core.wot.DiscoveryService;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
-import tn.supcom.museum.iam.security.AuthorizationService;
 import tn.supcom.museum.iam.security.UserAuthenticated;
+import tn.supcom.museum.api.service.ApiAuthorizationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 import java.util.List;
 import java.util.Set;
@@ -41,11 +39,8 @@ public class DeviceResource {
             Set.of(Device.PENDING, Device.ACTIVE, Device.REJECTED, Device.OFFLINE);
 
     @Inject
-    DeviceRepository devices;
-    @Inject
-    DiscoveryService discovery;
-    @Inject
-    AuthorizationService authorization;
+    InternalServiceClient services;
+    @Inject ApiAuthorizationService authorization;
 
     /** Liste des appareils ; ?status=pending pour les appareils decouverts en attente d'approbation. */
     @GET
@@ -53,7 +48,7 @@ public class DeviceResource {
         if (status != null && !STATUSES.contains(status))
             throw ApiException.badRequest("status doit valoir pending, active, rejected ou offline");
         AuthenticatedUser user = currentUser(security);
-        List<Device> inventory = devices.findByStatus(status);
+        List<Device> inventory = services.devices(status);
         if ("ADMIN".equals(user.role())) return inventory;
         return inventory.stream().filter(device -> user.zoneIds().contains(device.zoneId)).toList();
     }
@@ -64,8 +59,7 @@ public class DeviceResource {
     public Response get(@PathParam("deviceId") String deviceId, @Context UriInfo uri,
                         @Context SecurityContext security) {
         checkId(deviceId);
-        Device d = devices.findById(deviceId)
-                .orElseThrow(() -> ApiException.notFound("Appareil inconnu : " + deviceId));
+        Device d = services.device(deviceId);
         authorization.requireZone(currentUser(security), d.zoneId);
         Response.ResponseBuilder rb = Response.ok(d);
         if (d.thingId != null) rb.links(ThingResource.describedBy(ThingResource.tdUri(uri, deviceId)));
@@ -76,14 +70,14 @@ public class DeviceResource {
     @Path("/{deviceId}/approve")
     public Device approve(@PathParam("deviceId") String deviceId, @Context SecurityContext security) {
         authorization.requireAdmin(currentUser(security));
-        return discovery.approve(deviceId);
+        return services.approve(deviceId);
     }
 
     @POST
     @Path("/{deviceId}/reject")
     public Device reject(@PathParam("deviceId") String deviceId, @Context SecurityContext security) {
         authorization.requireAdmin(currentUser(security));
-        return discovery.reject(deviceId);
+        return services.reject(deviceId);
     }
 
     private static AuthenticatedUser currentUser(SecurityContext security) {
@@ -91,7 +85,7 @@ public class DeviceResource {
     }
 
     private static void checkId(String deviceId) {
-        if (!SchemaHandler.ID.matcher(deviceId).matches())
+        if (deviceId == null || !java.util.regex.Pattern.matches("^[A-Za-z0-9._-]{1,64}$", deviceId))
             throw ApiException.badRequest("Identifiant invalide : deviceId");
     }
 }

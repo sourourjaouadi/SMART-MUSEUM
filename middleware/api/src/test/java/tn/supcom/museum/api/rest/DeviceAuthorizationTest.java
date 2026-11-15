@@ -2,11 +2,11 @@ package tn.supcom.museum.api.rest;
 
 import jakarta.ws.rs.core.SecurityContext;
 import org.junit.jupiter.api.Test;
-import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.api.error.ApiException;
 import tn.supcom.museum.core.model.Device;
-import tn.supcom.museum.core.repository.DeviceRepository;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
-import tn.supcom.museum.iam.security.AuthorizationService;
+import tn.supcom.museum.api.service.ApiAuthorizationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 import java.security.Principal;
 import java.util.List;
@@ -20,19 +20,17 @@ class DeviceAuthorizationTest {
 
     private DeviceResource resource() {
         DeviceResource resource = new DeviceResource();
-        resource.devices = new DeviceRepository() {
-            @Override
-            public List<Device> findByStatus(String status) {
+        resource.services = new InternalServiceClient() {
+            @Override public List<Device> devices(String status) {
                 return List.of(east, west).stream()
                         .filter(device -> status == null || status.equals(device.status)).toList();
             }
-
-            @Override
-            public Optional<Device> findById(String deviceId) {
-                return List.of(east, west).stream().filter(device -> deviceId.equals(device.deviceId)).findFirst();
+            @Override public Device device(String deviceId) {
+                return List.of(east, west).stream().filter(device -> deviceId.equals(device.deviceId)).findFirst()
+                        .orElseThrow(() -> ApiException.notFound("missing"));
             }
         };
-        resource.authorization = new AuthorizationService();
+        resource.authorization = new ApiAuthorizationService();
         return resource;
     }
 

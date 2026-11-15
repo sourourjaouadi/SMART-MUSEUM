@@ -8,7 +8,6 @@ import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
-import tn.supcom.museum.core.config.Env;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -20,27 +19,39 @@ import java.util.stream.Collectors;
 public class CorsFilter implements ContainerRequestFilter, ContainerResponseFilter {
 
     private final Set<String> allowed = Arrays
-            .stream(Env.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174").split(","))
+            .stream(System.getenv().getOrDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174").split(","))
             .map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
 
     @Override
     public void filter(ContainerRequestContext req) {
-        if ("OPTIONS".equalsIgnoreCase(req.getMethod()) && req.getHeaderString("Origin") != null) {
-            req.abortWith(Response.ok().build());
+        String origin = req.getHeaderString("Origin");
+        if ("OPTIONS".equalsIgnoreCase(req.getMethod()) && origin != null) {
+            if (!isAllowed(origin)) {
+                req.abortWith(Response.status(Response.Status.FORBIDDEN).build());
+                return;
+            }
+            Response.ResponseBuilder preflight = Response.ok();
+            addCorsHeaders(preflight::header, origin);
+            req.abortWith(preflight.build());
         }
     }
 
     @Override
     public void filter(ContainerRequestContext req, ContainerResponseContext res) {
         String origin = req.getHeaderString("Origin");
-        if (origin != null && allowed.contains(origin)) {
-            var h = res.getHeaders();
-            h.putSingle("Access-Control-Allow-Origin", origin);
-            h.putSingle("Vary", "Origin");
-            h.putSingle("Access-Control-Allow-Headers", "Content-Type, Authorization");
-            h.putSingle("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            h.putSingle("Access-Control-Expose-Headers", "Link, Location");
-            h.putSingle("Access-Control-Max-Age", "3600");
-        }
+        if (isAllowed(origin)) addCorsHeaders(res.getHeaders()::putSingle, origin);
+    }
+
+    private boolean isAllowed(String origin) {
+        return origin != null && allowed.contains(origin);
+    }
+
+    private static void addCorsHeaders(java.util.function.BiConsumer<String, Object> headers, String origin) {
+        headers.accept("Access-Control-Allow-Origin", origin);
+        headers.accept("Vary", "Origin");
+        headers.accept("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        headers.accept("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        headers.accept("Access-Control-Expose-Headers", "Link, Location");
+        headers.accept("Access-Control-Max-Age", "3600");
     }
 }

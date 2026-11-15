@@ -4,6 +4,6 @@ package tn.supcom.museum.api.config;
 import jakarta.ws.rs.ApplicationPath;
 import jakarta.ws.rs.core.Application;
 
-@ApplicationPath("/api")
+@ApplicationPath("/")
 public class JaxRsApplication extends Application {
 }

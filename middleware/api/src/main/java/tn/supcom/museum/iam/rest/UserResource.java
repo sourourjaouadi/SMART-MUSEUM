@@ -9,14 +9,12 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.HttpHeaders;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
 import tn.supcom.museum.iam.model.ClientProvisionRequest;
-import tn.supcom.museum.iam.repository.UserRepository;
-import tn.supcom.museum.iam.security.AuthorizationService;
 import tn.supcom.museum.iam.security.UserAuthenticated;
-import tn.supcom.museum.iam.security.UserAuthenticationService;
-
-import java.net.URI;
+import tn.supcom.museum.api.service.ApiAuthorizationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 /** Minimal account provisioning endpoint; deliberately no general user-management CRUD. */
 @Path("/users")
@@ -25,20 +23,20 @@ import java.net.URI;
 @UserAuthenticated
 public class UserResource {
     @Inject
-    UserAuthenticationService authentication;
-    @Inject
-    AuthorizationService authorization;
+    InternalServiceClient authentication;
+    @Inject ApiAuthorizationService authorization;
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response provisionClient(ClientProvisionRequest request,
-                                    @jakarta.ws.rs.core.Context SecurityContext security) {
+                                    @jakarta.ws.rs.core.Context SecurityContext security,
+                                    @jakarta.ws.rs.core.Context HttpHeaders headers) {
         authorization.requireAdmin((AuthenticatedUser) security.getUserPrincipal());
-        var account = authentication.provision(request == null ? null : request.name,
-                request == null ? null : request.email,
-                request == null ? null : request.password,
-                "CLIENT", request == null ? null : request.zoneIds);
+        authorization.requireAdmin((AuthenticatedUser) security.getUserPrincipal());
+        String bearer = headers.getHeaderString("Authorization");
+        // Forward the original user token; IAM performs its own ADMIN check at its trust boundary.
+        var account = authentication.provision(request, bearer);
         return Response.status(Response.Status.CREATED)
-                .entity(UserRepository.toAccount(account)).build();
+                .entity(account).build();
     }
 }

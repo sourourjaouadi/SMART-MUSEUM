@@ -1,7 +1,5 @@
 package tn.supcom.museum.iam.security;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
@@ -12,8 +10,9 @@ import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 import tn.supcom.museum.core.error.ErrorResponse;
-import tn.supcom.museum.iam.entity.UserEntity;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
+import tn.supcom.museum.api.service.InternalServiceClient;
+import tn.supcom.museum.api.error.ApiException;
 
 import java.security.Principal;
 import java.util.List;
@@ -23,9 +22,7 @@ import java.util.List;
 @Priority(Priorities.AUTHENTICATION)
 public class UserAuthenticationFilter implements ContainerRequestFilter {
     @Inject
-    AccessTokenService tokens;
-    @Inject
-    UserAuthenticationService authentication;
+    InternalServiceClient authentication;
 
     @Override
     public void filter(ContainerRequestContext request) {
@@ -37,24 +34,11 @@ public class UserAuthenticationFilter implements ContainerRequestFilter {
         }
 
         try {
-            Claims claims = tokens.validate(authorization.substring(7));
-            String subject = claims.getSubject();
-            String tokenRole = claims.get("role", String.class);
-            if (subject == null || subject.isBlank()
-                    || !("ADMIN".equals(tokenRole) || "CLIENT".equals(tokenRole))) {
-                abort(request);
-                return;
-            }
-            UserEntity stored = authentication.requireActiveUser(subject);
-            if (!tokenRole.equals(stored.role)) {
-                abort(request);
-                return;
-            }
-            AuthenticatedUser user = new AuthenticatedUser(stored.userId, stored.role,
-                    stored.zoneIds == null ? List.of() : List.copyOf(stored.zoneIds));
+            AuthenticatedUser user = authentication.authenticate(authorization.substring(7));
             request.setSecurityContext(new AuthenticatedSecurityContext(request.getSecurityContext(), user));
-        } catch (JwtException | IllegalArgumentException e) {
-            abort(request);
+        } catch (ApiException e) {
+            if (e.getStatus() == 401 || e.getStatus() == 403) abort(request);
+            else request.abortWith(Response.status(e.getStatus()).type(MediaType.APPLICATION_JSON).entity(new ErrorResponse(e.getCode(), e.getMessage())).build());
         }
     }
 

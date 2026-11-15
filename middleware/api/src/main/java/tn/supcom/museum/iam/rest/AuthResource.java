@@ -9,14 +9,14 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import tn.supcom.museum.iam.model.LoginRequest;
 import tn.supcom.museum.iam.model.LoginResponse;
-import tn.supcom.museum.iam.security.UserAuthenticationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 @Path("/auth")
 @ApplicationScoped
 @Produces(MediaType.APPLICATION_JSON)
 public class AuthResource {
     @Inject
-    UserAuthenticationService authentication;
+    InternalServiceClient authentication;
 
     @POST
     @Path("/login")

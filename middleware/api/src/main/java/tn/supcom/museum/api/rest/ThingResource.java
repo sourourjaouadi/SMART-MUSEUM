@@ -14,15 +14,14 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
-import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.api.error.ApiException;
 import tn.supcom.museum.core.model.ThingAnnouncement;
-import tn.supcom.museum.core.repository.ThingRepository;
-import tn.supcom.museum.core.validation.SchemaHandler;
-import tn.supcom.museum.core.wot.DiscoveryService;
+import tn.supcom.museum.core.model.DiscoveryResult;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
-import tn.supcom.museum.iam.security.AuthorizationService;
 import tn.supcom.museum.iam.security.ServiceTokenRequired;
 import tn.supcom.museum.iam.security.UserAuthenticated;
+import tn.supcom.museum.api.service.ApiAuthorizationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 import java.net.URI;
 import java.util.Map;
@@ -39,18 +38,15 @@ public class ThingResource {
     public static final String TD_MEDIA_TYPE = "application/td+json";
 
     @Inject
-    DiscoveryService discovery;
-    @Inject
-    ThingRepository things;
-    @Inject
-    AuthorizationService authorization;
+    InternalServiceClient services;
+    @Inject ApiAuthorizationService authorization;
 
     @POST
     @ServiceTokenRequired
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response announce(ThingAnnouncement a, @Context UriInfo uri) {
-        DiscoveryService.Result r = discovery.announce(a);
+        DiscoveryResult r = services.announce(a);
         URI td = tdUri(uri, r.device().deviceId);
         Response.ResponseBuilder rb = r.created() ? Response.created(td) : Response.ok();
         return rb.links(describedBy(td))
@@ -65,7 +61,7 @@ public class ThingResource {
     @Produces({TD_MEDIA_TYPE, MediaType.APPLICATION_JSON})
     public Response list(@jakarta.ws.rs.core.Context SecurityContext security) {
         authorization.requireAdmin(currentUser(security));
-        String body = "[" + String.join(",", things.findAllJson()) + "]";
+        String body = services.things();
         return Response.ok(body, MediaType.APPLICATION_JSON).build();
     }
 
@@ -76,9 +72,8 @@ public class ThingResource {
     public Response get(@PathParam("deviceId") String deviceId, @Context UriInfo uri,
                         @jakarta.ws.rs.core.Context SecurityContext security) {
         authorization.requireAdmin(currentUser(security));
-        if (!SchemaHandler.ID.matcher(deviceId).matches()) throw ApiException.badRequest("Identifiant invalide : deviceId");
-        String td = things.findJson(deviceId)
-                .orElseThrow(() -> ApiException.notFound("Aucune Thing Description pour " + deviceId));
+        if (deviceId == null || !java.util.regex.Pattern.matches("^[A-Za-z0-9._-]{1,64}$", deviceId)) throw ApiException.badRequest("Identifiant invalide : deviceId");
+        String td = services.thing(deviceId);
         URI device = uri.getBaseUriBuilder().path("devices").path(deviceId).build();
         return Response.ok(td, TD_MEDIA_TYPE)
                 .links(Link.fromUri(device).rel("describes").type(MediaType.APPLICATION_JSON).build())

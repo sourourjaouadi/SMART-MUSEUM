@@ -15,13 +15,12 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.SecurityContext;
-import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.api.error.ApiException;
 import tn.supcom.museum.core.model.Measurement;
-import tn.supcom.museum.core.repository.DeviceRepository;
-import tn.supcom.museum.core.repository.MeasurementRepository;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
-import tn.supcom.museum.iam.security.AuthorizationService;
 import tn.supcom.museum.iam.security.UserAuthenticated;
+import tn.supcom.museum.api.service.ApiAuthorizationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -34,11 +33,8 @@ import java.util.List;
 public class MeasurementResource {
 
     @Inject
-    MeasurementRepository measurements;
-    @Inject
-    DeviceRepository devices;
-    @Inject
-    AuthorizationService authorization;
+    InternalServiceClient services;
+    @Inject ApiAuthorizationService authorization;
 
     @GET
     @Path("/latest")
@@ -46,7 +42,7 @@ public class MeasurementResource {
                                     @jakarta.ws.rs.core.Context SecurityContext security) {
         if (zoneId == null || zoneId.isBlank()) throw ApiException.badRequest("zoneId obligatoire");
         authorization.requireZone(currentUser(security), zoneId);
-        return measurements.findLatest(zoneId);
+        return services.latest(zoneId);
     }
 
     @GET
@@ -58,11 +54,11 @@ public class MeasurementResource {
                                      @jakarta.ws.rs.core.Context SecurityContext security) {
         if (deviceId == null || deviceId.isBlank() || property == null || property.isBlank())
             throw ApiException.badRequest("deviceId et property obligatoires");
-        var device = devices.findById(deviceId)
-                .orElseThrow(() -> ApiException.notFound("Appareil inconnu : " + deviceId));
+        var device = services.device(deviceId);
         authorization.requireZone(currentUser(security), device.zoneId);
         int capped = Math.max(1, Math.min(limit, 5000));
-        return measurements.findHistory(deviceId, property, parse(from, "from"), parse(to, "to"), capped);
+        Instant parsedFrom = parse(from, "from"), parsedTo = parse(to, "to");
+        return services.history(deviceId, property, parsedFrom == null ? null : parsedFrom.toString(), parsedTo == null ? null : parsedTo.toString(), capped);
     }
 
     private static AuthenticatedUser currentUser(SecurityContext security) {

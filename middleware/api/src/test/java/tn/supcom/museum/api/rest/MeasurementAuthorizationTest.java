@@ -2,13 +2,12 @@ package tn.supcom.museum.api.rest;
 
 import jakarta.ws.rs.core.SecurityContext;
 import org.junit.jupiter.api.Test;
-import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.api.error.ApiException;
 import tn.supcom.museum.core.model.Device;
 import tn.supcom.museum.core.model.Measurement;
-import tn.supcom.museum.core.repository.DeviceRepository;
-import tn.supcom.museum.core.repository.MeasurementRepository;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
-import tn.supcom.museum.iam.security.AuthorizationService;
+import tn.supcom.museum.api.service.ApiAuthorizationService;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 import java.security.Principal;
 import java.util.List;
@@ -22,21 +21,15 @@ class MeasurementAuthorizationTest {
     private static MeasurementResource createResource() {
         Device east = device("sensor-east", "gallery-east");
         MeasurementResource resource = new MeasurementResource();
-        resource.devices = new DeviceRepository() {
-            @Override public Optional<Device> findById(String id) {
-                return "sensor-east".equals(id) ? Optional.of(east) : Optional.empty();
+        resource.services = new InternalServiceClient() {
+            @Override public Device device(String id) {
+                if (!"sensor-east".equals(id)) throw ApiException.notFound("missing");
+                return east;
             }
+            @Override public List<Measurement> latest(String zone) { return List.of(measurement(zone)); }
+            @Override public List<Measurement> history(String device, String property, String from, String to, int limit) { return List.of(measurement("gallery-east")); }
         };
-        resource.measurements = new MeasurementRepository() {
-            @Override public List<Measurement> findLatest(String zone) {
-                return List.of(measurement(zone));
-            }
-            @Override public List<Measurement> findHistory(String device, String property,
-                                                           java.time.Instant from, java.time.Instant to, int limit) {
-                return List.of(measurement("gallery-east"));
-            }
-        };
-        resource.authorization = new AuthorizationService();
+        resource.authorization = new ApiAuthorizationService();
         return resource;
     }
 

@@ -15,9 +15,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import tn.supcom.museum.core.model.Measurement;
-import tn.supcom.museum.core.validation.ValidationChain;
-import tn.supcom.museum.core.validation.ValidationHandler.Outcome;
 import tn.supcom.museum.iam.security.ServiceTokenRequired;
+import tn.supcom.museum.api.service.InternalServiceClient;
 
 import java.util.Map;
 
@@ -26,15 +25,15 @@ import java.util.Map;
 public class IngestResource {
 
     @Inject
-    ValidationChain chain;
+    InternalServiceClient services;
 
     @POST
     @ServiceTokenRequired
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response ingest(Measurement m) {
-        Outcome o = chain.process(m);
-        if (o == Outcome.DUPLICATE) {
+        var result = services.ingest(m);
+        if ("duplicate".equals(result.status())) {
             return Response.ok(Map.of("status", "duplicate", "message", "Mesure deja traitee")).build();
         }
         return Response.accepted(Map.of("status", "accepted")).build();
