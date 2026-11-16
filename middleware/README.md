@@ -84,9 +84,9 @@ middleware/api/target/smart-museum.war
 Open these health URLs in Edge using the Windows user profile where the local
 mkcert CA is trusted:
 
-- `https://api.smartmuseum.test:8443/api/health`
-- `https://localhost:8443/core/health`
-- `https://localhost:8443/iam/health`
+- `https://api.smartmuseum.test/api/health`
+- `http://localhost:8080/core/health`
+- `http://localhost:8080/iam/health`
 
 Each should return HTTP 200 with status and Mongo reported as `UP`. For a
 repeatable strict TLS and integration check, use
@@ -100,11 +100,12 @@ Les endpoints `/api/devices` et de mesures exigent maintenant un JWT Bearer; voi
 la section Authentification ci-dessous.
 
 For local HTTPS setup, follow `deployment/README.md`. Public browser origins
-use port 8443: Client `https://smartmuseum.test:8443/`, Admin
-`https://admin.smartmuseum.test:8443/`, and API
-`https://api.smartmuseum.test:8443/api`. CORE and IAM are internal services;
-their health probes are available at `https://localhost:8443/core/health` and
-`https://localhost:8443/iam/health`, but their business routes are not public.
+use the standard HTTPS port (no port in the URL): Client `https://smartmuseum.test/`, Admin
+`https://admin.smartmuseum.test/`, and API
+`https://api.smartmuseum.test/api`. CORE and IAM are internal services;
+they run on the internal loopback-only server; their health probes are
+`http://localhost:8080/core/health` and
+`http://localhost:8080/iam/health`, but their business routes are not public.
 HTTP requests to the public hosts redirect to HTTPS. Do not disable certificate
 validation if Windows curl reports its revocation-check limitation with the
 local mkcert certificate; use a browser with the installed Current User CA or
@@ -204,7 +205,7 @@ si la zone n'existe pas : les modifications ADMIN sont conservees au redemarrage
 
 Demonstration : dossier `Geolocalisation` de `postman/smart-museum-v1.postman_collection.json`.
 Renseigner localement `adminEmail`/`adminPassword` (jamais dans Git), executer `Login ADMIN`
-puis les requetes dans l'ordre contre `{{apiUrl}}` (`https://api.smartmuseum.test:8443`).
+puis les requetes dans l'ordre contre `{{apiUrl}}` (`https://api.smartmuseum.test`).
 Postman doit faire confiance a l'AC mkcert locale (`%LOCALAPPDATA%\mkcert\rootCA.pem`).
 
 ## Authentification et autorisation des PWA
@@ -274,9 +275,9 @@ $email = Read-Host "Admin email"
 $securePassword = Read-Host "Admin password" -AsSecureString
 $password = [Net.NetworkCredential]::new('', $securePassword).Password
 $body = @{ email = $email; password = $password } | ConvertTo-Json
-$login = Invoke-RestMethod -Method Post -Uri https://api.smartmuseum.test:8443/api/auth/login -ContentType application/json -Body $body
+$login = Invoke-RestMethod -Method Post -Uri https://api.smartmuseum.test/api/auth/login -ContentType application/json -Body $body
 $headers = @{ Authorization = "Bearer $($login.accessToken)" }
-Invoke-RestMethod -Uri https://api.smartmuseum.test:8443/api/devices -Headers $headers
+Invoke-RestMethod -Uri https://api.smartmuseum.test/api/devices -Headers $headers
 $password = $null
 ```
 

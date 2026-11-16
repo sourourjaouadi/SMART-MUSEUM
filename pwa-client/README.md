@@ -23,7 +23,7 @@ npm run dev
 ```
 
 Open the local URL printed by Vite. `.env.example` uses
-`VITE_API_BASE_URL=http://localhost:8080` and `VITE_DATA_MODE=mock`.
+`VITE_API_BASE_URL=https://api.smartmuseum.test/api` and `VITE_DATA_MODE=mock`.
 Keep `mock` for standalone demonstration mode; the existing fixture data stays
 available without a running backend. Set `VITE_DATA_MODE=api` to start at the
 login page and load live data after a successful sign-in. Alternatively,
@@ -123,9 +123,9 @@ freshness. A new service worker waits for the user to select **Update app**.
 ## Local WildFly static WAR (M1/M2)
 
 The Client is served at the root of its own WildFly virtual host as
-`smart-museum-client.war` on `https://smartmuseum.test:8443/`. In the M2
+`smart-museum-client.war` on `https://smartmuseum.test/`. In the M2
 WildFly deployment it calls the independent API WAR at
-`https://api.smartmuseum.test:8443/api`; CORE and IAM remain internal services.
+`https://api.smartmuseum.test/api`; CORE and IAM remain internal services.
 Build the complete Client/Admin/middleware set from the repository root with:
 
 ```powershell
@@ -136,11 +136,11 @@ The Client WAR is written to
 `deployment/target/smart-museum-client.war`; it contains the production `dist/`
 bundle and WildFly descriptors. `build-all.ps1` builds the Client in API mode
 with the HTTPS API URL and restores the calling shell's previous environment
-afterward. The ordinary Vite development default remains mock mode and
-`http://localhost:8080` for local backend testing. For a manual hosted build,
-set `VITE_DATA_MODE=api` and `VITE_API_BASE_URL=https://api.smartmuseum.test:8443/api`
+afterward. The ordinary Vite development default remains mock mode; the
+default API URL is `https://api.smartmuseum.test/api`. For a manual hosted build,
+set `VITE_DATA_MODE=api` and `VITE_API_BASE_URL=https://api.smartmuseum.test/api`
 before `npm run build`, then ensure backend `CORS_ALLOWED_ORIGINS` includes
-the exact Client origin `https://smartmuseum.test:8443`.
+the exact Client origin `https://smartmuseum.test`.
 
 The descriptor binds the WAR to Undertow host `smartmuseum-host`. See
 [`deployment/README.md`](../deployment/README.md) for aliases, HTTPS, guarded

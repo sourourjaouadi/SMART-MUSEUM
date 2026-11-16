@@ -27,7 +27,7 @@ and then the Vitest component tests.
 `VITE_DATA_MODE` selects the build mode (`src/admin/services/adminDataSource.js`):
 
 - `api` (used by `deployment/build-all.ps1` with
-  `VITE_API_BASE_URL=https://api.smartmuseum.test:8443/api`): the only way in
+  `VITE_API_BASE_URL=https://api.smartmuseum.test/api`): the only way in
   is a real ADMIN sign-in through `POST /api/auth/login`. There is no demo entry.
 - `mock` (default for `npm run dev` and tests): the sign-in screen also offers
   "Continue with demo data", which opens the local mock workspace below.
@@ -40,7 +40,7 @@ sign-out, on expiry, and on any protected `401`; the app then returns to the
 sign-in screen with a "session ended" notice. No credentials are stored in code.
 
 The API origin must allow the Admin origin: DEV `CORS_ALLOWED_ORIGINS` includes
-`https://admin.smartmuseum.test:8443` (`middleware/config/dev.properties`,
+`https://admin.smartmuseum.test` (`middleware/config/dev.properties`,
 `dev.env.example`; restart WildFly after changing `dev.env`). PROD origins
 come from the `prod.*.example` templates.
 

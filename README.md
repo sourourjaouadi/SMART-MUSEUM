@@ -289,7 +289,7 @@ Base path: `/api`. Full contract: [`contracts/openapi.yaml`](contracts/openapi.y
 ### Examples
 
 ```http
-GET https://api.smartmuseum.test:8443/api/health
+GET https://api.smartmuseum.test/api/health
 ```
 
 ```json
@@ -297,7 +297,7 @@ GET https://api.smartmuseum.test:8443/api/health
 ```
 
 ```http
-POST https://api.smartmuseum.test:8443/api/auth/login
+POST https://api.smartmuseum.test/api/auth/login
 Content-Type: application/json
 
 { "email": "<ACCOUNT_EMAIL>", "password": "<ACCOUNT_PASSWORD>" }
@@ -309,7 +309,7 @@ Content-Type: application/json
 ```
 
 ```http
-GET https://api.smartmuseum.test:8443/api/measurements/latest?zoneId=salle-01
+GET https://api.smartmuseum.test/api/measurements/latest?zoneId=salle-01
 Authorization: Bearer <JWT>
 ```
 
@@ -370,11 +370,11 @@ live deployment or use the original `museum` Mongo database for M2 tests.
 
 ### Browser URLs and health
 
-- Client: `https://smartmuseum.test:8443/`
-- Admin: `https://admin.smartmuseum.test:8443/` (currently mock-only)
-- API health: `https://api.smartmuseum.test:8443/api/health`
-- CORE health: `https://localhost:8443/core/health`
-- IAM health: `https://localhost:8443/iam/health`
+- Client: `https://smartmuseum.test/`
+- Admin: `https://admin.smartmuseum.test/` (ADMIN sign-in)
+- API health: `https://api.smartmuseum.test/api/health`
+- CORE health: `http://localhost:8080/core/health` (internal server, loopback only)
+- IAM health: `http://localhost:8080/iam/health` (internal server, loopback only)
 
 Use the locally trusted certificate in a normal browser. Windows Schannel
 curl can report a revocation-check limitation for a local mkcert CA; do not
@@ -448,7 +448,7 @@ Node-RED flow is not currently versioned in this repository.
 - **Device trust:** only devices approved by an ADMIN (`active`) can send measurements, and only for the properties and units declared in their Thing Description.
 - **Secrets** (`INGEST_SERVICE_TOKEN`, `JWT_SIGNING_KEY_BASE64`, bootstrap password) are environment variables, outside Git and never logged.
 - **CORS** is limited to the configured PWA origins.
-- Local WildFly development uses HTTPS on 8443 with a current-user-trusted mkcert certificate. Production still requires managed HTTPS (typically 443), MQTT over TLS (8883), private MongoDB access, and production secrets.
+- Local WildFly development uses the standard ports (HTTPS 443, HTTP 80 redirecting to HTTPS) with a current-user-trusted mkcert certificate; CORE and IAM run on an internal loopback-only server (127.0.0.1:8080). Production still requires managed HTTPS, MQTT over TLS (8883), private MongoDB access, and production secrets.
 
 ---
 

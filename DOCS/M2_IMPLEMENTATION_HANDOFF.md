@@ -133,13 +133,13 @@ middleware/api/target/smart-museum.war
 
 | Application | Context | Undertow host resource | Local host / URL |
 |---|---|---|---|
-| Client PWA | `/` | `smartmuseum-host` | `https://smartmuseum.test:8443/` |
-| Admin PWA | `/` | `admin-smartmuseum-host` | `https://admin.smartmuseum.test:8443/` |
-| API | `/api` | `api-smartmuseum-host` | `https://api.smartmuseum.test:8443/api` |
-| CORE | `/core` | `default-host` | Internal; health can be checked locally at `https://localhost:8443/core/health` |
-| IAM | `/iam` | `default-host` | Internal; health can be checked locally at `https://localhost:8443/iam/health` |
+| Client PWA | `/` | `smartmuseum-host` | `https://smartmuseum.test/` |
+| Admin PWA | `/` | `admin-smartmuseum-host` | `https://admin.smartmuseum.test/` |
+| API | `/api` | `api-smartmuseum-host` | `https://api.smartmuseum.test/api` |
+| CORE | `/core` | `internal-host` (`internal-server`, 127.0.0.1:8080) | Internal; health can be checked locally at `http://localhost:8080/core/health` |
+| IAM | `/iam` | `internal-host` (`internal-server`, 127.0.0.1:8080) | Internal; health can be checked locally at `http://localhost:8080/iam/health` |
 
-Public host HTTP traffic redirects to HTTPS. The public WARs have transport
+Public host HTTP traffic (port 80) redirects to HTTPS on 443 without a port. The public WARs have transport
 confidentiality constraints. CORE/IAM service-to-service URLs in local DEV
 remain `http://localhost:8080/core` and `http://localhost:8080/iam`; public
 clients must not be routed to their internal business endpoints.
@@ -380,9 +380,9 @@ local CA; do not bypass certificate validation. The acceptance script uses
 OpenSSL with strict chain and hostname verification.
 
 Expected health payloads contain `"status":"UP"` and `"mongo":"UP"`.
-Browser URLs are Client `https://smartmuseum.test:8443/`, Admin
-`https://admin.smartmuseum.test:8443/`, API
-`https://api.smartmuseum.test:8443/api/health`. Confirm the Client manifest,
+Browser URLs are Client `https://smartmuseum.test/`, Admin
+`https://admin.smartmuseum.test/`, API
+`https://api.smartmuseum.test/api/health`. Confirm the Client manifest,
 activated service worker, API health fetch, and absence of browser TLS, CORS,
 and mixed-content errors.
 
