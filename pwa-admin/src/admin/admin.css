@@ -25,3 +25,5 @@
 .admin-detail-grid dd{margin:0;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
 .admin-table caption{padding:1px}
 @media(max-width:650px){.admin-toolbar{align-items:stretch}.admin-toolbar>.admin-search,.admin-toolbar>.admin-filter{min-width:calc(50% - 6px)}.admin-detail-grid{grid-template-columns:1fr}.admin-app-label{font-size:9px}}
+
+.admin-location-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:9px;margin-top:16px}.admin-location-form__field{display:grid;gap:4px;flex:1 1 120px;color:var(--a-muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em}.admin-location-form__field input{width:100%;height:34px;padding:0 10px;border:1px solid var(--a-line);border-radius:7px;background:#fffefa;color:var(--a-ink);font-size:11px;text-transform:none;letter-spacing:0}

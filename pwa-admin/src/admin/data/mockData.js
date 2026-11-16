@@ -8,8 +8,9 @@ export const ADMIN_MOCK_DATA = {
     { deviceId: 'bme280-pending-03', type: 'BME280', zoneId: 'salle-03', gatewayId: 'gw-02', status: 'pending', connectivity: null, lastSeenAt: '2026-11-08T10:07:00Z' },
   ],
   zones: [
-    { zoneId: 'salle-01', name: 'Textile gallery', floor: 'Ground floor', status: 'active' },
-    { zoneId: 'salle-02', name: 'Manuscript room', floor: 'First floor', status: 'active' },
+    // Sample WGS84 coordinates in central Tunis, not a real building.
+    { zoneId: 'salle-01', name: 'Textile gallery', floor: 'Ground floor', status: 'active', location: { latitude: 36.8065, longitude: 10.1815, floor: 0 } },
+    { zoneId: 'salle-02', name: 'Manuscript room', floor: 'First floor', status: 'active', location: { latitude: 36.80662, longitude: 10.18172, floor: 1 } },
     { zoneId: 'salle-03', name: 'Ceramics wing', floor: 'Ground floor', status: 'active' },
   ],
   thresholds: [
