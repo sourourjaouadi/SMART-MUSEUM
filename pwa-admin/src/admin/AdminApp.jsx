@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  getAdminSnapshot,
-  setDeviceDecision,
-  setDeviceLocation,
-  setZoneLocation,
-} from './services/adminService.js';
+import { createMockDataSource } from './services/adminDataSource.js';
 import './admin.css';
+
+const defaultDataSource = createMockDataSource();
 
 const NAV = [
   ['dashboard', 'Overview'],
@@ -117,7 +114,7 @@ function formatTimestamp(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-export default function AdminApp() {
+export default function AdminApp({ dataSource = defaultDataSource } = {}) {
   const [page, setPage] = useState(() => window.location.hash.slice(1) || 'dashboard');
   const [data, setData] = useState(null);
   const [state, setState] = useState('loading');
@@ -131,35 +128,39 @@ export default function AdminApp() {
   const [notice, setNotice] = useState('');
   const [editZoneId, setEditZoneId] = useState(null);
 
+  const isDemo = dataSource.mode === 'mock';
+  const loadFailure = isDemo ? 'Admin demo data could not be loaded.' : 'Admin data could not be loaded from the API.';
+  const savedWhere = isDemo ? 'in the demo. This change was not sent to a server.' : 'on the server.';
+
   async function loadSnapshot() {
     setState('loading');
     setError('');
     try {
-      setData(await getAdminSnapshot());
+      setData(await dataSource.loadSnapshot());
       setState('ready');
-    } catch {
-      setError('Admin demo data could not be loaded.');
+    } catch (err) {
+      setError(isDemo ? loadFailure : `${loadFailure} ${err.message ?? ''}`.trim());
       setState('error');
     }
   }
 
   useEffect(() => {
     let mounted = true;
-    getAdminSnapshot()
+    dataSource.loadSnapshot()
       .then((snapshot) => {
         if (mounted) {
           setData(snapshot);
           setState('ready');
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (mounted) {
-          setError('Admin demo data could not be loaded.');
+          setError(isDemo ? loadFailure : `${loadFailure} ${err.message ?? ''}`.trim());
           setState('error');
         }
       });
     return () => { mounted = false; };
-  }, []);
+  }, [dataSource]);
 
   useEffect(() => {
     const sync = () => setPage(window.location.hash.slice(1) || 'dashboard');
@@ -194,9 +195,11 @@ export default function AdminApp() {
     setActionError('');
     setNotice('');
     try {
-      const updatedDevices = await setDeviceDecision(devices, deviceId, decision);
-      setData((current) => ({ ...current, devices: updatedDevices }));
-      setNotice(`${deviceId} ${decision} in the demo. This action was not sent to a server.`);
+      const patch = await dataSource.decide(data, deviceId, decision);
+      setData((current) => ({ ...current, ...patch }));
+      setNotice(isDemo
+        ? `${deviceId} ${decision} in the demo. This action was not sent to a server.`
+        : `${deviceId} ${decision} on the server.`);
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -211,15 +214,17 @@ export default function AdminApp() {
     setNotice('');
     try {
       if (kind === 'zone') {
-        const updatedZones = await setZoneLocation(zones, id, values);
-        setData((current) => ({ ...current, zones: updatedZones }));
-        setNotice(`${id} coordinates saved in the demo. This change was not sent to a server.`);
+        const zone = zones.find((item) => item.zoneId === id);
+        const { name = zone?.name ?? '', ...location } = values;
+        const patch = await dataSource.saveZone(data, id, { name, location });
+        setData((current) => ({ ...current, ...patch }));
+        setNotice(`${id} coordinates saved ${savedWhere}`);
       } else {
-        const updatedDevices = await setDeviceLocation(devices, id, values);
-        setData((current) => ({ ...current, devices: updatedDevices }));
+        const patch = await dataSource.setDeviceLocation(data, id, values);
+        setData((current) => ({ ...current, ...patch }));
         setNotice(values
-          ? `${id} location assigned in the demo. This change was not sent to a server.`
-          : `${id} now uses its zone location in the demo. This change was not sent to a server.`);
+          ? `${id} location assigned ${savedWhere}`
+          : `${id} now uses its zone location ${savedWhere}`);
       }
     } catch (err) {
       setActionError(err.message);
