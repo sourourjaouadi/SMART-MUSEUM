@@ -20,7 +20,7 @@ foreach ($app in @('pwa-client', 'pwa-admin')) {
     $previousDataMode = [Environment]::GetEnvironmentVariable('VITE_DATA_MODE', 'Process')
     try {
         # Both PWAs use the public HTTPS API; Admin in api mode requires a real ADMIN sign-in.
-        $env:VITE_API_BASE_URL = 'https://api.smartmuseum.test:8443/api'
+        $env:VITE_API_BASE_URL = 'https://api.smartmuseum.test/api'
         $env:VITE_DATA_MODE = 'api'
         Invoke-Checked 'npm.cmd' @('run', 'build') $appPath
     } finally {

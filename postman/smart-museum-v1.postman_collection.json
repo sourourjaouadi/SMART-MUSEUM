@@ -6,7 +6,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8080"
+      "value": "https://api.smartmuseum.test"
     },
     {
       "key": "serviceToken",
@@ -18,7 +18,7 @@
     },
     {
       "key": "apiUrl",
-      "value": "https://api.smartmuseum.test:8443"
+      "value": "https://api.smartmuseum.test"
     },
     {
       "key": "adminEmail",
