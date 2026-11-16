@@ -254,7 +254,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
         ? `${deviceId} ${decision} in the demo. This action was not sent to a server.`
         : `${deviceId} ${decision} on the server.`);
     } catch (err) {
-      setActionError(err.message);
+      handleActionError(err);
     } finally {
       setProcessingId(null);
     }
@@ -280,9 +280,22 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
           : `${id} now uses its zone location ${savedWhere}`);
       }
     } catch (err) {
-      setActionError(err.message);
+      handleActionError(err);
     } finally {
       setProcessingId(null);
+    }
+  }
+
+  /**
+   * Shows the safe API message. A 404 means the record disappeared on the server, so the
+   * snapshot is reloaded in the background. A 401 is handled by the session layer (sign-in screen).
+   */
+  function handleActionError(err) {
+    setActionError(err?.message || 'The action could not be completed.');
+    if (err?.status === 404) {
+      dataSource.loadSnapshot()
+        .then((snapshot) => setData(snapshot))
+        .catch(() => { /* The visible message already explains the failure. */ });
     }
   }
 
@@ -299,7 +312,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
         : `CLIENT account ${account.email} created on the server (${zonesText}).`);
       return true;
     } catch (err) {
-      setActionError(err.message);
+      handleActionError(err);
       return false;
     } finally {
       setProcessingId(null);
