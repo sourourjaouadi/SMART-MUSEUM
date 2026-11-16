@@ -48,6 +48,7 @@ foreach ($expected in @(
         'name="http" port="${jboss.http.port:80}"',
         'name="https" port="${jboss.https.port:443}"',
         'name="internal-http" interface="internal" port="8080"',
+        '<expression-filter name="https-redirect"',
         '<server name="internal-server" default-host="internal-host">')) {
     if (!$xml.Contains($expected)) { throw "Expected setting not found after the CLI run: $expected. Restore $backup." }
 }
