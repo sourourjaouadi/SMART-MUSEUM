@@ -149,6 +149,97 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+  /api/devices/{deviceId}/location:
+    put:
+      summary: ADMIN - affecter une localisation propre a un appareil approuve (le zoneId ne change jamais)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Location' }
+            example: { latitude: 36.80652, longitude: 10.18148, floor: 0 }
+      responses:
+        '200':
+          description: Appareil avec locationSource=device
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409':
+          description: Appareil non approuve (pending ou rejected)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    delete:
+      summary: ADMIN - supprimer la localisation propre (l'appareil herite a nouveau de sa zone)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      responses:
+        '200':
+          description: Appareil avec la localisation de sa zone (locationSource=zone) ou sans localisation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/zones:
+    get:
+      summary: Zones et coordonnees WGS84 (ADMIN - toutes ; CLIENT - seulement ses zones attribuees)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Zone' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/zones/{zoneId}:
+    get:
+      summary: Detail d'une zone (403 avant 404 pour une zone non attribuee au CLIENT)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ZoneId' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Zone' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      summary: ADMIN - creer ou remplacer le nom et les coordonnees d'une zone (idempotent)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ZoneId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneUpdate' }
+            example: { name: Textile gallery, location: { latitude: 36.8065, longitude: 10.1815, floor: 0 } }
+      responses:
+        '200':
+          description: Zone enregistree
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Zone' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
   /api/things:
     post:
       summary: Annonce de decouverte (Node-RED relaie le topic MQTT museum/v1/{zoneId}/{deviceId}/td)
@@ -257,6 +348,11 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: '^[A-Za-z0-9._-]{1,64}$' }
+    ZoneId:
+      name: zoneId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9._-]{1,64}$' }
   responses:
     Error:
       description: Erreur JSON {error,message}; 400 validation, 401 authentification, 403 autorisation ou appareil non fiable, 404 ressource absente, 409 conflit, 422 plage/propriete
@@ -330,6 +426,35 @@ components:
         status: { type: string, enum: [pending, active, rejected, offline] }
         lastSeenAt: { type: string, format: date-time }
         thingId: { type: string, example: 'urn:museum:device:bme280-01' }
+        location:
+          allOf: [{ $ref: '#/components/schemas/Location' }]
+          description: Optionnel - localisation effective (propre a l'appareil, sinon celle de sa zone)
+        locationSource:
+          type: string
+          enum: [device, zone]
+          description: Optionnel - origine de location ; absent si aucune localisation n'est connue
+    Location:
+      type: object
+      description: Position WGS84 en degres decimaux et etage optionnel
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number, format: double, minimum: -90, maximum: 90, example: 36.8065 }
+        longitude: { type: number, format: double, minimum: -180, maximum: 180, example: 10.1815 }
+        floor: { type: integer, minimum: -10, maximum: 200, example: 0 }
+    Zone:
+      type: object
+      required: [zoneId, name]
+      properties:
+        zoneId: { type: string, example: salle-01 }
+        name: { type: string, example: Textile gallery }
+        location: { $ref: '#/components/schemas/Location' }
+    ZoneUpdate:
+      type: object
+      required: [name, location]
+      properties:
+        zoneId: { type: string, description: Optionnel - doit etre egal au zoneId du chemin }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        location: { $ref: '#/components/schemas/Location' }
     ThingAnnouncement:
       type: object
       required: [deviceId, zoneId, td]
