@@ -69,15 +69,22 @@ function formatCoordinates(location) {
   return Number.isInteger(location.floor) ? `${text} · Floor ${location.floor}` : text;
 }
 
+/** Own position = a location not marked as inherited (the API sends locationSource "zone" for inherited ones). */
+function ownLocation(device) {
+  return device.location && device.locationSource !== 'zone' ? device.location : null;
+}
+
 function describeDeviceLocation(device, zones) {
-  const own = formatCoordinates(device.location);
+  const own = formatCoordinates(ownLocation(device));
   if (own) return `${own} (own position)`;
-  const inherited = formatCoordinates(zones.find((zone) => zone.zoneId === device.zoneId)?.location);
+  const inherited = formatCoordinates(device.location)
+    ?? formatCoordinates(zones.find((zone) => zone.zoneId === device.zoneId)?.location);
   return inherited ? `${inherited} (from zone)` : 'Not set';
 }
 
-function LocationForm({ label, initial, busy, onSave, onClear, clearLabel }) {
+function LocationForm({ label, initial, initialName, withName = false, busy, onSave, onClear, clearLabel }) {
   const [values, setValues] = useState({
+    ...(withName ? { name: initialName ?? '' } : {}),
     latitude: initial?.latitude ?? '',
     longitude: initial?.longitude ?? '',
     floor: initial?.floor ?? '',
@@ -99,6 +106,7 @@ function LocationForm({ label, initial, busy, onSave, onClear, clearLabel }) {
       aria-label={label}
       onSubmit={(event) => { event.preventDefault(); onSave(values); }}
     >
+      {withName && field('name', 'Zone name', 'text')}
       {field('latitude', 'Latitude', 'decimal')}
       {field('longitude', 'Longitude', 'decimal')}
       {field('floor', 'Floor', 'numeric')}
@@ -342,12 +350,12 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
                     : 'Measurements are shown in the Client PWA for the zones of a CLIENT account.'} />
                 </dl>
                 <LocationForm
-                  key={`${selected.deviceId}-${JSON.stringify(selected.location ?? null)}`}
+                  key={`${selected.deviceId}-${JSON.stringify(ownLocation(selected))}`}
                   label={`Assign location for ${selected.deviceId}`}
-                  initial={selected.location}
+                  initial={ownLocation(selected)}
                   busy={processingId === `location:${selected.deviceId}`}
                   onSave={(values) => saveLocation('device', selected.deviceId, values)}
-                  onClear={selected.location ? () => saveLocation('device', selected.deviceId, null) : undefined}
+                  onClear={ownLocation(selected) ? () => saveLocation('device', selected.deviceId, null) : undefined}
                   clearLabel="Use zone location"
                 />
               </section>;
@@ -361,20 +369,23 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
     if (page === 'zones') {
       const zoneRows = zones.map((zone) => ({
         ...zone,
+        name: zone.unregistered ? 'No zone record yet' : zone.name,
         coordinates: formatCoordinates(zone.location) ?? 'Not set',
         devices: devices.filter((device) => device.zoneId === zone.zoneId).length,
       }));
       const editedZone = zones.find((zone) => zone.zoneId === editZoneId) ?? zones[0];
       return <section className="admin-panel">
         <div className="admin-panel__heading"><div><p className="admin-eyebrow">Museum layout</p><h2>Zone management</h2></div></div>
-        <AdminTable columns={zoneColumns} rows={zoneRows} caption="Museum zone inventory" empty="No zones configured" emptyHint="No zones are present in the mock data." />
+        <AdminTable columns={isDemo ? zoneColumns : apiZoneColumns} rows={zoneRows} caption="Museum zone inventory" empty="No zones configured" emptyHint={isDemo ? 'No zones are present in the mock data.' : 'No zone records or device zones exist yet.'} />
         {editedZone && <div className="admin-device-details">
-          <div className="admin-panel__heading"><div><p className="admin-eyebrow">Geolocation</p><h3>Edit zone coordinates</h3></div>
-            <label className="admin-filter"><span className="sr-only">Zone to edit</span><select aria-label="Zone to edit" value={editedZone.zoneId} onChange={(event) => setEditZoneId(event.target.value)}>{zones.map((zone) => <option key={zone.zoneId} value={zone.zoneId}>{zone.zoneId}</option>)}</select></label>
+          <div className="admin-panel__heading"><div><p className="admin-eyebrow">Geolocation</p><h3>{editedZone.unregistered ? 'Create zone record' : 'Edit zone coordinates'}</h3></div>
+            <label className="admin-filter"><span className="sr-only">Zone to edit</span><select aria-label="Zone to edit" value={editedZone.zoneId} onChange={(event) => setEditZoneId(event.target.value)}>{zones.map((zone) => <option key={zone.zoneId} value={zone.zoneId}>{zone.unregistered ? `${zone.zoneId} (no record)` : zone.zoneId}</option>)}</select></label>
           </div>
           <LocationForm
-            key={`${editedZone.zoneId}-${JSON.stringify(editedZone.location ?? null)}`}
+            key={`${editedZone.zoneId}-${editedZone.name ?? ''}-${JSON.stringify(editedZone.location ?? null)}`}
             label={`Coordinates for ${editedZone.zoneId}`}
+            withName
+            initialName={editedZone.name}
             initial={editedZone.location}
             busy={processingId === `location:${editedZone.zoneId}`}
             onSave={(values) => saveLocation('zone', editedZone.zoneId, values)}
@@ -434,5 +445,7 @@ const deviceColumns = [['deviceId', 'Device ID'], ['type', 'Type'], ['zoneId', '
 const inventoryColumns = [['deviceId', 'Device ID'], ['type', 'Type'], ['zoneId', 'Zone'], ['gatewayId', 'Gateway'], ['status', 'Status'], ['connectivity', 'Connectivity'], ['lastSeenAt', 'Last seen'], ['action', 'Details']];
 const apiInventoryColumns = inventoryColumns.filter(([key]) => key !== 'connectivity');
 const zoneColumns = [['zoneId', 'Zone ID'], ['name', 'Name'], ['floor', 'Floor'], ['coordinates', 'Coordinates (WGS84)'], ['devices', 'Devices'], ['status', 'Status']];
+// API zones have no floor label or status: the floor number is part of the coordinates.
+const apiZoneColumns = [['zoneId', 'Zone ID'], ['name', 'Name'], ['coordinates', 'Coordinates (WGS84)'], ['devices', 'Devices']];
 const thresholdColumns = [['label', 'Measurement'], ['property', 'Property'], ['min', 'Minimum'], ['max', 'Maximum'], ['unit', 'Unit']];
 const userColumns = [['name', 'Name'], ['email', 'Email'], ['accessRole', 'Application role'], ['jobTitle', 'Job title'], ['status', 'Entry status']];
