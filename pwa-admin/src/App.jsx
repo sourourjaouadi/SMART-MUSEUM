@@ -14,7 +14,8 @@ import { ADMIN_SESSION_EXPIRED_EVENT, clearSession, getSession } from './admin/s
  * "Continue with demo data"; signing in there still uses the real API.
  */
 export default function App({ buildMode = BUILD_DATA_MODE, login } = {}) {
-  const allowDemo = buildMode === DATA_MODES.MOCK;
+  // Demo entry exists only in mock builds; Vite inlines VITE_DATA_MODE so api builds drop it.
+  const allowDemo = import.meta.env.VITE_DATA_MODE !== DATA_MODES.API && buildMode === DATA_MODES.MOCK;
   const [session, setSession] = useState(() => getSession());
   const [demo, setDemo] = useState(false);
   const [expired, setExpired] = useState(false);

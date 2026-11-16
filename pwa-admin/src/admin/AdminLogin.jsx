@@ -52,7 +52,8 @@ export default function AdminLogin({ onAuthenticated, onDemo, allowDemo = false,
           {error && <p className="admin-inline-error" role="alert">{error}</p>}
           <button type="submit" className="admin-button" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
         </form>
-        {allowDemo && (
+        {/* Vite inlines VITE_DATA_MODE: in api builds this branch is removed from the bundle. */}
+        {import.meta.env.VITE_DATA_MODE !== 'api' && allowDemo && (
           <button type="button" className="admin-button admin-button--quiet admin-login__demo" onClick={onDemo}>
             Continue with demo data
           </button>
