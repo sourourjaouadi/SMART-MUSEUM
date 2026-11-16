@@ -6,6 +6,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.component.test.jsx', 'src/**/*.test.js'],
+    // Service-layer tests ending in .node.test.js run with `node --test`.
+    exclude: ['**/node_modules/**', 'src/**/*.node.test.js'],
     restoreMocks: true,
   },
 });

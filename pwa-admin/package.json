@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run --config vitest.config.js"
+    "test": "node --test src/admin/services/adminSession.node.test.js src/admin/services/adminApi.node.test.js src/admin/services/adminDataSource.node.test.js && vitest run --config vitest.config.js"
   },
   "dependencies": {
     "react": "^19.2.0",
