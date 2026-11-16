@@ -19,7 +19,53 @@ npm run build
 
 The production build is written to `pwa-admin/dist/`.
 
-## Current features
+`npm test` runs the service-layer node tests (`src/admin/services/*.node.test.js`)
+and then the Vitest component tests.
+
+## Data modes and sign-in
+
+`VITE_DATA_MODE` selects the build mode (`src/admin/services/adminDataSource.js`):
+
+- `api` (used by `deployment/build-all.ps1` with
+  `VITE_API_BASE_URL=https://api.smartmuseum.test:8443/api`): the only way in
+  is a real ADMIN sign-in through `POST /api/auth/login`. There is no demo entry.
+- `mock` (default for `npm run dev` and tests): the sign-in screen also offers
+  "Continue with demo data", which opens the local mock workspace below.
+  Signing in still uses the real API.
+
+A CLIENT (or disabled) account is refused in the UI and no session is stored.
+The ADMIN session (token, expiry, account) is kept in `sessionStorage` under
+`smart-museum.admin.session`, separate from the Client PWA, and is cleared on
+sign-out, on expiry, and on any protected `401`; the app then returns to the
+sign-in screen with a "session ended" notice. No credentials are stored in code.
+
+The API origin must allow the Admin origin: DEV `CORS_ALLOWED_ORIGINS` includes
+`https://admin.smartmuseum.test:8443` (`middleware/config/dev.properties`,
+`dev.env.example`; restart WildFly after changing `dev.env`). PROD origins
+come from the `prod.*.example` templates.
+
+## Pages in API mode
+
+| Page | Middleware calls |
+|---|---|
+| Overview | `GET /api/devices`, `GET /api/zones`; KPIs by API status (total, active, pending, offline or rejected, registered zones) |
+| Device inventory | `GET /api/devices`; filters use the API statuses `active`, `pending`, `offline`, `rejected` |
+| Pending approvals | `POST /api/devices/{id}/approve` or `/reject`, then the list is reloaded |
+| Zones | `GET /api/zones`, `PUT /api/zones/{zoneId}` (name + WGS84 location). Device zones without a zone record are listed as "No zone record yet" and can be created |
+| Device location | `PUT` / `DELETE /api/devices/{id}/location`; inherited locations are labelled "from zone", own positions "own position"; the zone never changes |
+| Users | "Create a CLIENT account" form using `POST /api/users`. The user list is **not connected yet** (no list endpoint) |
+| Thresholds | **Not connected yet**: no thresholds endpoint; the values shown are illustrative |
+
+Location, zone-name and account fields are validated locally with the backend
+rules before any request.
+
+Error states: `401` returns to sign-in; `403` "requires an administrator
+account"; `404` "no longer exists" and the data is reloaded; `409` shows the
+reason (device not approved for a location, no Thing Description for an
+approval, duplicate account email); `400` shows the server's validation message;
+network failures and timeouts show a message, with Retry when loading.
+
+## Mock mode features
 
 - Overview counts total mock inventory records, explicitly online and offline
   mock connectivity, pending devices, and active zones. Pending and maintenance
@@ -60,9 +106,9 @@ cleans up only older caches with the admin-specific cache prefix. The worker
 does not handle cross-origin requests or cache unrecognized assets.
 
 Offline support is limited to loading the application shell and its cached
-bundle. There is no live data, backend connection, or durable storage for
-administrative actions. Simulated decisions remain in page memory and are
-lost on reload.
+bundle. API data is never cached (the worker ignores cross-origin requests),
+so API mode needs a connection; administrative actions are not queued offline.
+Simulated decisions in mock mode remain in page memory and are lost on reload.
 
 ## Deployment assumption
 
@@ -87,17 +133,15 @@ mvn -f deployment/pom.xml package
 ```
 
 The output is `deployment/target/smart-museum-admin.war`. It contains the
-production `dist/` bundle and its own root-context WildFly descriptor. The
-Admin remains mock-only. See [`deployment/README.md`](../deployment/README.md)
-for local aliases, WildFly setup, verification, HTTPS requirements, and
-rollback.
+production `dist/` bundle and its own root-context WildFly descriptor. For the
+WildFly deployment, build with `deployment/build-all.ps1` so the bundle is in
+`api` mode with the HTTPS API URL. See
+[`deployment/README.md`](../deployment/README.md) for local aliases, WildFly
+setup, verification, HTTPS requirements, and rollback.
 
-## Future backend integration
+## Not connected yet
 
-`src/admin/services/adminService.js` is the mock data boundary. Replace its
-fixture operations only after the team agrees the API paths, request/response
-schemas, status-transition rules, error semantics, persistence behavior, and
-authorization model. Normalize any future API data into the view model the UI
-uses. Do not put privileged credentials in browser code. This prototype has no
-authentication, authorization, real account management, threshold editing,
-alert evaluation, MQTT/Node-RED integration, or direct database access.
+- User list: the middleware has no endpoint that lists accounts (IAM scope).
+- Thresholds: no thresholds endpoint or alert evaluation.
+- Admin has no direct MQTT/Node-RED or database access; all data goes through
+  the public API with the ADMIN Bearer token.
