@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import './testSessionStorage.js';
 import { ApiError, createApiClient } from './api.js';
 import { clearSession, getAccessToken, saveSession } from './authSession.js';
 
