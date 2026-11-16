@@ -26,6 +26,20 @@ public class InternalServiceClient {
     public Device device(String id) { return core("internal/core/devices/" + segment(id), Device.class); }
     public Device approve(String id) { return coreAction("internal/core/devices/" + segment(id) + "/approve", Device.class); }
     public Device reject(String id) { return coreAction("internal/core/devices/" + segment(id) + "/reject", Device.class); }
+    public Device assignLocation(String id, Location location) {
+        return coreWrite("PUT", "internal/core/devices/" + segment(id) + "/location", location, Device.class);
+    }
+    public Device clearLocation(String id) {
+        return coreWrite("DELETE", "internal/core/devices/" + segment(id) + "/location", null, Device.class);
+    }
+    public List<Zone> zones() {
+        try (Client c = client()) {
+            return readList(invoke(c.target(base("CORE_SERVICE_URL")).path("internal/core/zones"), MediaType.APPLICATION_JSON_TYPE),
+                    new GenericType<List<Zone>>() { });
+        }
+    }
+    public Zone zone(String id) { return core("internal/core/zones/" + segment(id), Zone.class); }
+    public Zone saveZone(String id, Zone zone) { return coreWrite("PUT", "internal/core/zones/" + segment(id), zone, Zone.class); }
     public List<Measurement> latest(String zone) { return coreList("internal/core/measurements/latest", "zoneId", zone); }
     public List<Measurement> history(String device, String property, String from, String to, int limit) {
         try (Client c = client()) {
@@ -68,6 +82,15 @@ public class InternalServiceClient {
                     .request(MediaType.APPLICATION_JSON_TYPE)
                     .header("X-Internal-Service-Token", internalToken())
                     .method("POST");
+            return read(response, type);
+        }
+    }
+    private <T> T coreWrite(String method, String path, Object entity, Class<T> type) {
+        try (Client c = client()) {
+            var request = c.target(base("CORE_SERVICE_URL")).path(path).request(MediaType.APPLICATION_JSON_TYPE)
+                    .header("X-Internal-Service-Token", internalToken());
+            Response response = entity == null ? request.method(method)
+                    : request.method(method, jakarta.ws.rs.client.Entity.json(entity));
             return read(response, type);
         }
     }
