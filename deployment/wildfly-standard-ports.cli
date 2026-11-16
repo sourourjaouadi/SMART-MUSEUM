@@ -1,0 +1,16 @@
+# Public HTTP/HTTPS listeners on the standard ports 80 and 443.
+# Run offline (WildFly stopped) through deployment/configure-wildfly-ports.ps1,
+# which backs up standalone.xml first. Re-running it is harmless.
+#
+# - The listeners stay on the "public" interface (127.0.0.1 in this setup).
+# - The http listener keeps redirect-socket="https", so HTTP requests to the
+#   CONFIDENTIAL Client/Admin/API WARs redirect to https://<host>/ (port 443).
+# - Management stays on 127.0.0.1:9990; TLS resources and hosts are unchanged.
+# - jboss.http.port / jboss.https.port can still override the ports at startup.
+
+embed-server --server-config=standalone.xml --std-out=discard
+
+/socket-binding-group=standard-sockets/socket-binding=http:write-attribute(name=port,value="${jboss.http.port:80}")
+/socket-binding-group=standard-sockets/socket-binding=https:write-attribute(name=port,value="${jboss.https.port:443}")
+
+stop-embedded-server
