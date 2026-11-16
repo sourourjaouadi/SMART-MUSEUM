@@ -340,13 +340,17 @@ docker exec museum-m2-sandbox-mongo mongosh --quiet --eval "db.adminCommand({pin
 
 If `middleware/config/dev.env` does not exist, initialize it once. The
 initializer creates random secrets and can prompt securely for a sandbox
-bootstrap administrator; do not pass passwords on the command line:
+bootstrap administrator; do not pass passwords on the command line. Each
+developer creates their own admin account and secrets; none are shared
+through Git (see "Accounts and credentials" in
+[`deployment/README.md`](deployment/README.md)):
 
 ```powershell
-.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin
+.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin -WriteAcceptanceCredentials
 .\deployment\prepare-local-https.ps1
 $wildflyHome = 'C:\path\to\wildfly-42.0.0.Final'
 .\deployment\configure-wildfly-https.ps1 -WildFlyHome $wildflyHome
+.\deployment\configure-wildfly-ports.ps1 -WildFlyHome $wildflyHome   # WildFly stopped: ports 80/443 + internal CORE/IAM server
 .\deployment\build-all.ps1
 ```
 
