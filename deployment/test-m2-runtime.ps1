@@ -27,9 +27,9 @@ $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
 $results = [System.Collections.Generic.List[object]]::new()
 $runId = [Guid]::NewGuid().ToString('N').Substring(0, 10)
 
-function Send-M2HttpsRequest([string]$HostName, [string]$Method, [string]$Path,
+function New-M2RawRequest([string]$HostHeader, [string]$Method, [string]$Path,
         [hashtable]$Headers = @{}, [string]$Body = $null) {
-    $request = "$Method $Path HTTP/1.1`r`nHost: ${HostName}:8443`r`nConnection: close`r`n"
+    $request = "$Method $Path HTTP/1.1`r`nHost: ${HostHeader}`r`nConnection: close`r`n"
     foreach ($key in $Headers.Keys) { $request += "$key`: $($Headers[$key])`r`n" }
     if ($null -ne $Body) {
         if (-not $Headers.ContainsKey('Content-Type')) { $request += "Content-Type: application/json`r`n" }
@@ -37,15 +37,62 @@ function Send-M2HttpsRequest([string]$HostName, [string]$Method, [string]$Path,
     } elseif ($Method -in @('POST', 'PUT', 'PATCH', 'DELETE')) {
         $request += "Content-Length: 0`r`n`r`n"
     } else { $request += "`r`n" }
+    return $request
+}
 
+# Public applications: HTTPS on the standard port 443, strict chain and hostname checks.
+function Send-M2HttpsRequest([string]$HostName, [string]$Method, [string]$Path,
+        [hashtable]$Headers = @{}, [string]$Body = $null) {
+    $request = New-M2RawRequest $HostName $Method $Path $Headers $Body
+
+    # Pipe the request as BOM-less UTF-8 (matching Content-Length). Windows
+    # PowerShell writes native stdin with the console input encoding; a host
+    # using UTF-8 with BOM would prefix the request line with U+FEFF, which
+    # WildFly rejects as HTTP 400.
+    $utf8NoBom = [Text.UTF8Encoding]::new($false)
+    $oldInputEncoding = [Console]::InputEncoding
+    $OutputEncoding = $utf8NoBom
     $oldPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $response = $request | & $script:openssl s_client -quiet -connect "${HostName}:8443" `
-        -servername $HostName -verify_hostname $HostName -verify_return_error -CAfile $script:caFile 2>$null
-    $exitCode = $LASTEXITCODE
-    $ErrorActionPreference = $oldPreference
+    try {
+        [Console]::InputEncoding = $utf8NoBom
+        $response = $request | & $script:openssl s_client -quiet -connect "${HostName}:443" `
+            -servername $HostName -verify_hostname $HostName -verify_return_error -CAfile $script:caFile 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        [Console]::InputEncoding = $oldInputEncoding
+        $ErrorActionPreference = $oldPreference
+    }
     if ($exitCode -ne 0) { throw "TLS verification or HTTPS request failed for ${HostName}${Path}." }
     return ($response -join "`n")
+}
+
+# Plain HTTP on loopback: the internal CORE/IAM server (127.0.0.1:8080) and the
+# public port-80 listener, whose only job is redirecting to HTTPS.
+function Send-M2PlainHttpRequest([string]$HostName, [int]$Port, [string]$Method, [string]$Path,
+        [hashtable]$Headers = @{}, [string]$Body = $null) {
+    $hostHeader = if ($Port -eq 80) { $HostName } else { "${HostName}:$Port" }
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes((New-M2RawRequest $hostHeader $Method $Path $Headers $Body))
+    $client = [Net.Sockets.TcpClient]::new()
+    try {
+        $client.Connect('127.0.0.1', $Port)
+        $stream = $client.GetStream()
+        $stream.ReadTimeout = 10000
+        $stream.Write($bytes, 0, $bytes.Length)
+        return ([IO.StreamReader]::new($stream, [Text.UTF8Encoding]::new($false))).ReadToEnd()
+    } catch {
+        throw "Plain HTTP request failed for ${HostName}:${Port}${Path}."
+    } finally { $client.Dispose() }
+}
+
+function Assert-M2InternalStatus([string]$Name, [string]$Method, [string]$Path,
+        [int]$Expected, [hashtable]$Headers = @{}, [string]$Body = $null) {
+    $response = Send-M2PlainHttpRequest 'localhost' 8080 $Method $Path $Headers $Body
+    $actual = Get-M2Status $response
+    $script:results.Add([pscustomobject]@{Check=$Name;Status=$actual;Pass=($actual -eq $Expected)})
+    Write-Host "$Name => HTTP $actual"
+    if ($actual -ne $Expected) { throw "$Name expected HTTP $Expected but received $actual." }
+    return $response
 }
 
 function Get-M2Status([string]$Response) {
@@ -105,13 +152,31 @@ function Update-SandboxUser([string]$UserId, [string]$Field, [string]$Value) {
 }
 
 # TLS, health, virtual host, and internal/public route separation.
+# CORE and IAM run only on the internal server (http://localhost:8080, loopback).
 foreach ($item in @(
-    @{Host='localhost';Path='/core/health';Name='CORE health'},
-    @{Host='localhost';Path='/iam/health';Name='IAM health'},
-    @{Host='api.smartmuseum.test';Path='/api/health';Name='API health'})) {
-    $response = Assert-M2Status $item.Name $item.Host GET $item.Path 200
-    $health = Get-M2Body $response | ConvertFrom-Json
+    @{Path='/core/health';Name='CORE health (internal :8080)'},
+    @{Path='/iam/health';Name='IAM health (internal :8080)'})) {
+    $health = Get-M2Body (Assert-M2InternalStatus $item.Name GET $item.Path 200) | ConvertFrom-Json
     if ($health.status -ne 'UP' -or $health.mongo -ne 'UP') { throw "$($item.Name) returned unhealthy JSON." }
+}
+$health = Get-M2Body (Assert-M2Status 'API health' 'api.smartmuseum.test' GET '/api/health' 200) | ConvertFrom-Json
+if ($health.status -ne 'UP' -or $health.mongo -ne 'UP') { throw 'API health returned unhealthy JSON.' }
+Assert-M2Status 'Public HTTPS does not serve CORE (Host localhost)' 'localhost' GET '/core/health' 404 | Out-Null
+Assert-M2Status 'Public HTTPS does not serve IAM (Host localhost)' 'localhost' GET '/iam/health' 404 | Out-Null
+
+# Port 80 only redirects to HTTPS on the standard port: no port in Location.
+foreach ($item in @(
+    @{Host='smartmuseum.test';Path='/'},
+    @{Host='admin.smartmuseum.test';Path='/'},
+    @{Host='api.smartmuseum.test';Path='/api/health'})) {
+    $redirect = Send-M2PlainHttpRequest $item.Host 80 GET $item.Path
+    $status = Get-M2Status $redirect
+    $location = Get-M2Header $redirect 'Location'
+    $expectedLocation = "https://$($item.Host)$($item.Path)"
+    $ok = ($status -in @(301, 302, 307, 308)) -and ($location -eq $expectedLocation)
+    $results.Add([pscustomobject]@{Check="HTTP redirect $($item.Host)";Status=$status;Pass=$ok})
+    Write-Host "HTTP redirect $($item.Host) => HTTP $status Location $location"
+    if (!$ok) { throw "http://$($item.Host)$($item.Path) must redirect to $expectedLocation (got $status $location)." }
 }
 foreach ($item in @(
     @{Host='smartmuseum.test';Path='/';Name='Client root'},
@@ -128,8 +193,14 @@ Assert-M2Status 'Public API does not expose IAM paths' 'api.smartmuseum.test' GE
 
 # CORS must accept the exact HTTPS Client origin and reject others.
 $allowedCors = Assert-M2Status 'Approved Client CORS preflight' 'api.smartmuseum.test' OPTIONS '/api/health' 200 `
+    @{Origin='https://smartmuseum.test';'Access-Control-Request-Method'='GET';'Access-Control-Request-Headers'='authorization'}
+if ((Get-M2Header $allowedCors 'Access-Control-Allow-Origin') -ne 'https://smartmuseum.test') { throw 'Approved CORS origin was not returned.' }
+$adminCors = Assert-M2Status 'Approved Admin CORS preflight' 'api.smartmuseum.test' OPTIONS '/api/zones' 200 `
+    @{Origin='https://admin.smartmuseum.test';'Access-Control-Request-Method'='PUT';'Access-Control-Request-Headers'='authorization,content-type'}
+if ((Get-M2Header $adminCors 'Access-Control-Allow-Origin') -ne 'https://admin.smartmuseum.test') { throw 'Approved Admin CORS origin was not returned.' }
+$oldPortCors = Assert-M2Status 'Old :8443 origin no longer approved' 'api.smartmuseum.test' OPTIONS '/api/health' 403 `
     @{Origin='https://smartmuseum.test:8443';'Access-Control-Request-Method'='GET';'Access-Control-Request-Headers'='authorization'}
-if ((Get-M2Header $allowedCors 'Access-Control-Allow-Origin') -ne 'https://smartmuseum.test:8443') { throw 'Approved CORS origin was not returned.' }
+if (Get-M2Header $oldPortCors 'Access-Control-Allow-Origin') { throw 'The old :8443 origin received an allow header.' }
 $deniedCors = Assert-M2Status 'Unapproved CORS preflight' 'api.smartmuseum.test' OPTIONS '/api/health' 403 `
     @{Origin='https://unapproved.example';'Access-Control-Request-Method'='GET';'Access-Control-Request-Headers'='authorization'}
 if (Get-M2Header $deniedCors 'Access-Control-Allow-Origin') { throw 'Unapproved CORS origin received an allow header.' }
@@ -161,10 +232,10 @@ Assert-M2Status 'Malformed bearer token' 'api.smartmuseum.test' GET '/api/device
 
 # Internal token protection and API-to-IAM rejection path.
 $emptyCreds = @{email="unknown-$runId@example.test";password=(New-RandomPassword)} | ConvertTo-Json -Compress
-Assert-M2Status 'CORE internal token required' 'localhost' GET '/core/internal/core/devices/no-such-m2-device' 401 | Out-Null
-Assert-M2Status 'IAM internal token required' 'localhost' POST '/iam/internal/iam/login' 401 @{} $emptyCreds | Out-Null
+Assert-M2InternalStatus 'CORE internal token required' GET '/core/internal/core/devices/no-such-m2-device' 401 | Out-Null
+Assert-M2InternalStatus 'IAM internal token required' POST '/iam/internal/iam/login' 401 @{} $emptyCreds | Out-Null
 $tokenHeaders = @{'X-Internal-Service-Token'=$settings.INTER_SERVICE_TOKEN}
-Assert-M2Status 'CORE internal token accepted before lookup' 'localhost' GET '/core/internal/core/devices/no-such-m2-device' 404 $tokenHeaders | Out-Null
+Assert-M2InternalStatus 'CORE internal token accepted before lookup' GET '/core/internal/core/devices/no-such-m2-device' 404 $tokenHeaders | Out-Null
 $fakeLogin = Assert-M2Status 'API to IAM HTTP integration' 'api.smartmuseum.test' POST '/api/auth/login' 401 @{} $emptyCreds
 if ((Get-M2Body $fakeLogin) -match 'service unavailable|connection refused') { throw 'API-to-IAM call failed at the service boundary.' }
 

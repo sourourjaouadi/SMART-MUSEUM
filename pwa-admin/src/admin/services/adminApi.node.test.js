@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiError, createAdminApiClient } from './adminApi.js';
 
-const BASE = 'https://api.smartmuseum.test:8443/api';
+const BASE = 'https://api.smartmuseum.test/api';
 const device = { deviceId: 'test-admin-01', zoneId: 'salle-01', status: 'pending', type: 'bme280' };
 
 function response(status, payload) {

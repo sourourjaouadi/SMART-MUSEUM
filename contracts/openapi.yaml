@@ -12,7 +12,7 @@ info:
     accepte une durée configurée entre 60 et 3600 secondes (900 par défaut), et
     valide l'issuer configuré par JWT_ISSUER (smart-museum par défaut).
 servers:
-  - url: http://localhost:8080
+  - url: https://api.smartmuseum.test
 paths:
   /api/auth/login:
     post:

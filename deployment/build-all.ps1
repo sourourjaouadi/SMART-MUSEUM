@@ -20,14 +20,15 @@ foreach ($app in @('pwa-client', 'pwa-admin')) {
     $previousDataMode = [Environment]::GetEnvironmentVariable('VITE_DATA_MODE', 'Process')
     try {
         # Both PWAs use the public HTTPS API; Admin in api mode requires a real ADMIN sign-in.
-        $env:VITE_API_BASE_URL = 'https://api.smartmuseum.test:8443/api'
+        $env:VITE_API_BASE_URL = 'https://api.smartmuseum.test/api'
         $env:VITE_DATA_MODE = 'api'
         Invoke-Checked 'npm.cmd' @('run', 'build') $appPath
     } finally {
         [Environment]::SetEnvironmentVariable('VITE_API_BASE_URL', $previousApiBaseUrl, 'Process')
         [Environment]::SetEnvironmentVariable('VITE_DATA_MODE', $previousDataMode, 'Process')
     }
-    Invoke-Checked 'mvn.cmd' @('-f', 'deployment/pom.xml', 'package') $appPath
+    # clean: otherwise bundles from earlier builds stay in target/ and ship in the WAR.
+    Invoke-Checked 'mvn.cmd' @('-f', 'deployment/pom.xml', 'clean', 'package') $appPath
 }
 Invoke-Checked 'mvn.cmd' @('-f', 'middleware/pom.xml', 'clean', 'verify') $repoRoot
 

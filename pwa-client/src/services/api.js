@@ -1,6 +1,6 @@
 import { clearSession, getAccessToken } from './authSession.js';
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_API_BASE_URL = 'https://api.smartmuseum.test/api';
 const DEFAULT_TIMEOUT_MS = 10_000;
 const VALID_SOURCES = new Set(['real', 'simulated']);
 const VALID_QUALITY_VALUES = new Set(['good', 'uncertain', 'bad']);
