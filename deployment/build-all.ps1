@@ -27,7 +27,8 @@ foreach ($app in @('pwa-client', 'pwa-admin')) {
         [Environment]::SetEnvironmentVariable('VITE_API_BASE_URL', $previousApiBaseUrl, 'Process')
         [Environment]::SetEnvironmentVariable('VITE_DATA_MODE', $previousDataMode, 'Process')
     }
-    Invoke-Checked 'mvn.cmd' @('-f', 'deployment/pom.xml', 'package') $appPath
+    # clean: otherwise bundles from earlier builds stay in target/ and ship in the WAR.
+    Invoke-Checked 'mvn.cmd' @('-f', 'deployment/pom.xml', 'clean', 'package') $appPath
 }
 Invoke-Checked 'mvn.cmd' @('-f', 'middleware/pom.xml', 'clean', 'verify') $repoRoot
 
