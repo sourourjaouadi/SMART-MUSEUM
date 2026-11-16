@@ -35,8 +35,13 @@ The production build is written to `pwa-admin/dist/`.
 - Pending devices can be approved or rejected in local mock state only. The
   service rejects unknown IDs, invalid decisions, and decisions for devices
   that are no longer pending. Processing disables the decision controls.
-- Zone device counts are derived from device-to-zone records. Zone, threshold,
-  and user views remain read-only.
+- Zone device counts are derived from device-to-zone records. The zone table
+  shows WGS84 coordinates (sample values in central Tunis); a form edits a
+  zone's latitude, longitude and floor. Device details show the device location
+  (own position or inherited from its zone) and can assign or clear an own
+  position for approved devices; the zone never changes. These edits use the
+  same validation as the backend but stay in local mock state, like approvals.
+  Threshold and user views remain read-only.
 - User entries distinguish mock application role labels (`ADMIN`/`CLIENT`)
   from professional job titles. They do not represent real accounts or grants.
 - Loading, retryable error, and page-specific empty states are provided.
