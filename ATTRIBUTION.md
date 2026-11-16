@@ -23,8 +23,8 @@
 | Passerelle : publication MQTT, QoS 1, reconnexion, statut online, LWT | Claude sonnet 5.5 | Rédaction du client MQTT avec reconnexion automatique, publication du statut et message de dernière volonté. Revu et adapté. |
 | Passerelle : service systemd et documentation de l'agent | Claude sonnet 5.5 | Rédaction du fichier de service systemd, des exemples de configuration et du README de l'agent. |
 | Passerelle : simulateur de la deuxième zone | Claude sonnet 5.5 | Génération d'un simulateur de mesures, étiqueté simulated, pour la deuxième zone. |
-| Backend : temps de réponse constant au login | Claude sonnet 5.5 | Correction de sécurité pour ne pas révéler l'existence d'un email par le temps de réponse. |
-| Backend : architecture et persistance MongoDB | ChatGPT + Codex | Assistance à la structuration du backend Jakarta EE, de la couche Repository et de la persistance MongoDB pour les utilisateurs, appareils, mesures et Thing Descriptions. |
+| middleware : temps de réponse constant au login | Claude sonnet 5.5 | Correction de sécurité pour ne pas révéler l'existence d'un email par le temps de réponse. |
+| middleware : architecture et persistance MongoDB | ChatGPT + Codex | Assistance à la structuration du backend Jakarta EE, de la couche Repository et de la persistance MongoDB pour les utilisateurs, appareils, mesures et Thing Descriptions. |
 | Authentification et sécurité | ChatGPT + Codex | Implémentation de l'authentification avec BCrypt, génération et validation de JWT à durée limitée, gestion des rôles ADMIN/CLIENT et contrôle d'accès par zone. |
 | API REST sécurisées | ChatGPT + Codex | Mise en place des endpoints d'authentification, de gestion des utilisateurs, des appareils et des mesures, avec vérification des autorisations côté serveur. |
 | Validation et ingestion IoT | ChatGPT + Codex | Assistance à la conception de la chaîne de validation des mesures, à la détection des doublons et à leur stockage persistant dans MongoDB. |
