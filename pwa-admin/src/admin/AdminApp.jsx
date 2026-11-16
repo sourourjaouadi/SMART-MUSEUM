@@ -118,6 +118,49 @@ function LocationForm({ label, initial, initialName, withName = false, busy, onS
   );
 }
 
+function NotConnected() {
+  return <span className="admin-status admin-status--not-connected">Not connected yet</span>;
+}
+
+function ClientAccountForm({ zones, busy, onSubmit }) {
+  const [values, setValues] = useState({ name: '', email: '', password: '' });
+  const [zoneIds, setZoneIds] = useState([]);
+  const set = (name) => (event) => setValues((current) => ({ ...current, [name]: event.target.value }));
+  const toggleZone = (zoneId) => setZoneIds((current) => (current.includes(zoneId)
+    ? current.filter((id) => id !== zoneId)
+    : [...current, zoneId]));
+
+  return (
+    <form
+      className="admin-account-form"
+      aria-label="Create CLIENT account"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (await onSubmit({ ...values, zoneIds })) {
+          setValues({ name: '', email: '', password: '' });
+          setZoneIds([]);
+        } else {
+          setValues((current) => ({ ...current, password: '' }));
+        }
+      }}
+    >
+      <label className="admin-location-form__field"><span>Name</span><input value={values.name} onChange={set('name')} autoComplete="off" /></label>
+      <label className="admin-location-form__field"><span>Email</span><input type="email" value={values.email} onChange={set('email')} autoComplete="off" /></label>
+      <label className="admin-location-form__field"><span>Initial password (12+ characters)</span><input type="password" value={values.password} onChange={set('password')} autoComplete="new-password" /></label>
+      <fieldset className="admin-account-form__zones">
+        <legend>Assigned zones</legend>
+        {zones.length ? zones.map((zone) => (
+          <label key={zone.zoneId}>
+            <input type="checkbox" checked={zoneIds.includes(zone.zoneId)} onChange={() => toggleZone(zone.zoneId)} />
+            {zone.zoneId}
+          </label>
+        )) : <span>No zones are known yet.</span>}
+      </fieldset>
+      <div className="admin-actions"><button type="submit" className="admin-button" disabled={busy}>{busy ? 'Creating…' : 'Create CLIENT account'}</button></div>
+    </form>
+  );
+}
+
 function formatTimestamp(value) {
   if (!value) return 'Not available';
   const date = new Date(value);
@@ -238,6 +281,26 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
       }
     } catch (err) {
       setActionError(err.message);
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function provision(fields) {
+    if (processingId) return false;
+    setProcessingId('provision');
+    setActionError('');
+    setNotice('');
+    try {
+      const account = await dataSource.provisionClient(fields);
+      const zonesText = account.zoneIds?.length ? account.zoneIds.join(', ') : 'no zones';
+      setNotice(isDemo
+        ? `CLIENT account ${account.email} validated in the demo (${zonesText}). No account was created.`
+        : `CLIENT account ${account.email} created on the server (${zonesText}).`);
+      return true;
+    } catch (err) {
+      setActionError(err.message);
+      return false;
     } finally {
       setProcessingId(null);
     }
@@ -395,10 +458,28 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
       </section>;
     }
     if (page === 'thresholds') {
-      return <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Conservation limits</p><h2>Threshold management</h2></div></div><p className="admin-copy">These illustrative limits are read-only and are not connected to alerts or measurement evaluation.</p><AdminTable columns={thresholdColumns} rows={data.thresholds} caption="Illustrative environmental thresholds" empty="No thresholds configured" emptyHint="No threshold records are present in the mock data." /></section>;
+      return <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Conservation limits</p><h2>Threshold management</h2></div><NotConnected /></div><p className="admin-copy">These illustrative limits are read-only and are not connected to alerts or measurement evaluation. The middleware has no thresholds endpoint yet.</p><AdminTable columns={thresholdColumns} rows={data.thresholds} caption="Illustrative environmental thresholds" empty="No thresholds configured" emptyHint="No threshold records are present in the mock data." /></section>;
     }
     if (page === 'users') {
-      return <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Workspace directory</p><h2>User management</h2></div></div><p className="admin-copy">Sample entries only. These role labels do not create accounts or grant access.</p><AdminTable columns={userColumns} rows={data.users} caption="Illustrative user directory" empty="No users listed" emptyHint="No user records are present in the mock data." /></section>;
+      return <>
+        <section className="admin-panel">
+          <div className="admin-panel__heading"><div><p className="admin-eyebrow">Account provisioning</p><h2>Create a CLIENT account</h2></div></div>
+          <p className="admin-copy">{isDemo
+            ? 'Demo mode: the account is validated but not created on any server.'
+            : 'Creates an active CLIENT account through the middleware. The account can only read the zones selected here.'}</p>
+          <ClientAccountForm
+            zones={zones}
+            busy={processingId === 'provision'}
+            onSubmit={provision}
+          />
+          {actionError && page === 'users' && <p className="admin-inline-error" role="alert">{actionError}</p>}
+        </section>
+        <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Workspace directory</p><h2>User management</h2></div><NotConnected /></div>
+          {isDemo
+            ? <><p className="admin-copy">Sample entries only. These role labels do not create accounts or grant access.</p><AdminTable columns={userColumns} rows={data.users} caption="Illustrative user directory" empty="No users listed" emptyHint="No user records are present in the mock data." /></>
+            : <div className="admin-empty"><strong>The user list is not connected yet</strong><span>The middleware has no endpoint that lists accounts. Created accounts are confirmed above.</span></div>}
+        </section>
+      </>;
     }
     return <section className="admin-panel"><h2>Page not found</h2><a href="#dashboard">Return to overview</a></section>;
   }
