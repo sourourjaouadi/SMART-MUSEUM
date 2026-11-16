@@ -59,6 +59,8 @@ The API service supports these backend endpoints:
 
 - `GET /api/health`
 - `GET /api/devices` and `GET /api/devices/{deviceId}`
+- `GET /api/zones` (optional zone name and WGS84 coordinates; the dashboard
+  still works without it)
 - `GET /api/measurements/latest?zoneId=...`
 - `GET /api/measurements?deviceId=...&property=...&from=...&to=...&limit=...`
 

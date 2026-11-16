@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import tn.supcom.museum.core.data.DeviceData;
 import tn.supcom.museum.core.entity.DeviceEntity;
 import tn.supcom.museum.core.model.Device;
+import tn.supcom.museum.core.model.Location;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -85,7 +86,21 @@ public class DeviceRepository {
         });
     }
 
-    private static DeviceEntity toEntity(Device d) {
+    /**
+     * Fixe (location non null) ou efface (null) la localisation propre de l'appareil.
+     * Ne modifie jamais le zoneId. Retourne false si l'appareil est inconnu.
+     */
+    public boolean updateLocation(String deviceId, Location location) {
+        return data.findById(deviceId).map(e -> {
+            e.latitude = location == null ? null : location.latitude;
+            e.longitude = location == null ? null : location.longitude;
+            e.floor = location == null ? null : location.floor;
+            data.save(e);
+            return true;
+        }).orElse(false);
+    }
+
+    static DeviceEntity toEntity(Device d) {
         DeviceEntity e = new DeviceEntity();
         e.deviceId = d.deviceId;
         e.type = d.type;
@@ -94,10 +109,16 @@ public class DeviceRepository {
         e.status = d.status;
         e.thingId = d.thingId;
         e.lastSeenAt = d.lastSeenAt == null ? null : Date.from(Instant.parse(d.lastSeenAt));
+        // Seule la localisation propre est persistee ; celle heritee de la zone est calculee a la lecture.
+        if (d.location != null && Device.LOCATION_DEVICE.equals(d.locationSource)) {
+            e.latitude = d.location.latitude;
+            e.longitude = d.location.longitude;
+            e.floor = d.location.floor;
+        }
         return e;
     }
 
-    private static Device toModel(DeviceEntity e) {
+    static Device toModel(DeviceEntity e) {
         Device d = new Device();
         d.deviceId = e.deviceId;
         d.type = e.type;
@@ -106,6 +127,10 @@ public class DeviceRepository {
         d.status = e.status;
         d.thingId = e.thingId;
         d.lastSeenAt = e.lastSeenAt == null ? null : e.lastSeenAt.toInstant().toString();
+        if (e.latitude != null && e.longitude != null) {
+            d.location = new Location(e.latitude, e.longitude, e.floor);
+            d.locationSource = Device.LOCATION_DEVICE;
+        }
         return d;
     }
 }

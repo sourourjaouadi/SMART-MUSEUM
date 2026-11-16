@@ -65,7 +65,11 @@ available zones are derived from `GET /api/devices`, deduplicated by the
 returned `zoneId`, and are not hard-coded. For a selected zone, it shows the
 returned device identifiers, zone, gateway, and any provided status and
 `lastSeenAt` values. Status and last-seen values are displayed as supplied;
-the PWA does not interpret them as online/offline semantics. The documented
+the PWA does not interpret them as online/offline semantics. When
+`GET /api/zones` returns coordinates for the selected zone, the panel shows the
+zone location (WGS84 latitude/longitude and floor), and each device shows its
+location labelled "own position" or "from zone". Mock coordinates are sample
+values in central Tunis, not a real building. The documented
 example devices are:
 
 | Device | Zone | Gateway | Source |

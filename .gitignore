@@ -9,3 +9,6 @@ config.yaml
 middleware/config/*.env
 !middleware/config/*.env.example
 middleware/config/*.properties.local
+
+# Build artifacts
+*.war

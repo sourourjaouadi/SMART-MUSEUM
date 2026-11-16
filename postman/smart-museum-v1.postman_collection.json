@@ -15,6 +15,22 @@
     {
       "key": "mid",
       "value": ""
+    },
+    {
+      "key": "apiUrl",
+      "value": "https://api.smartmuseum.test:8443"
+    },
+    {
+      "key": "adminEmail",
+      "value": ""
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
     }
   ],
   "item": [
@@ -469,6 +485,268 @@
           "raw": "{{baseUrl}}/api/measurements?deviceId=bme280-01&property=temperature"
         }
       }
+    },
+    {
+      "name": "Geolocalisation",
+      "description": "Coordonnees WGS84 des zones et localisation des appareils. A executer dans l'ordre contre l'API HTTPS ({{apiUrl}}). Renseigner adminEmail/adminPassword localement (jamais dans Git) ; 'Login ADMIN' enregistre le jeton dans adminToken. Les coordonnees sont des donnees d'exemple (Tunis).",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Login ADMIN -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 200', function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set('adminToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Zones -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('liste de zones', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiUrl}}/api/zones"
+            }
+          }
+        },
+        {
+          "name": "Zones sans jeton -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiUrl}}/api/zones"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Zone salle-01 -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('coordonnees WGS84', function () { pm.expect(pm.response.json().location).to.have.property('latitude'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiUrl}}/api/zones/salle-01"
+            }
+          }
+        },
+        {
+          "name": "Zone salle-01 coordonnees -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/zones/salle-01"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Textile gallery\",\n  \"location\": {\n    \"latitude\": 36.8065,\n    \"longitude\": 10.1815,\n    \"floor\": 0\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Zone latitude hors plage -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/zones/salle-01"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Textile gallery\",\n  \"location\": {\n    \"latitude\": 95.0,\n    \"longitude\": 10.1815,\n    \"floor\": 0\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Localisation appareil bme280-01 -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('localisation propre', function () { pm.expect(pm.response.json().locationSource).to.eql('device'); });",
+                  "pm.test('zoneId inchange', function () { pm.expect(pm.response.json().zoneId).to.eql('salle-01'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/devices/bme280-01/location"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 36.80652,\n  \"longitude\": 10.18148,\n  \"floor\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "Localisation appareil longitude invalide -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/devices/bme280-01/location"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 36.80652,\n  \"longitude\": 181.0\n}"
+            }
+          }
+        },
+        {
+          "name": "Supprimer localisation bme280-01 -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('statut 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('herite de la zone', function () { pm.expect(pm.response.json().locationSource).to.eql('zone'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiUrl}}/api/devices/bme280-01/location"
+            }
+          }
+        }
+      ]
     }
   ]
 }

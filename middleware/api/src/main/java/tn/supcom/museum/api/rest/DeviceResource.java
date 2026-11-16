@@ -8,8 +8,11 @@ package tn.supcom.museum.api.rest;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -21,6 +24,7 @@ import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
 import tn.supcom.museum.api.error.ApiException;
 import tn.supcom.museum.core.model.Device;
+import tn.supcom.museum.core.model.Location;
 import tn.supcom.museum.iam.model.AuthenticatedUser;
 import tn.supcom.museum.iam.security.UserAuthenticated;
 import tn.supcom.museum.api.service.ApiAuthorizationService;
@@ -78,6 +82,26 @@ public class DeviceResource {
     public Device reject(@PathParam("deviceId") String deviceId, @Context SecurityContext security) {
         authorization.requireAdmin(currentUser(security));
         return services.reject(deviceId);
+    }
+
+    /** ADMIN : localisation propre d'un appareil approuve ; le zoneId n'est jamais modifie. */
+    @PUT
+    @Path("/{deviceId}/location")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Device assignLocation(@PathParam("deviceId") String deviceId, Location location,
+                                 @Context SecurityContext security) {
+        authorization.requireAdmin(currentUser(security));
+        checkId(deviceId);
+        return services.assignLocation(deviceId, location);
+    }
+
+    /** ADMIN : supprime la localisation propre ; l'appareil herite a nouveau de sa zone. */
+    @DELETE
+    @Path("/{deviceId}/location")
+    public Device clearLocation(@PathParam("deviceId") String deviceId, @Context SecurityContext security) {
+        authorization.requireAdmin(currentUser(security));
+        checkId(deviceId);
+        return services.clearLocation(deviceId);
     }
 
     private static AuthenticatedUser currentUser(SecurityContext security) {

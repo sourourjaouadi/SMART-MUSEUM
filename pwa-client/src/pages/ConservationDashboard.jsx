@@ -29,6 +29,7 @@ const INITIAL_LIVE_STATE = {
   status: 'idle',
   devices: [],
   measurements: [],
+  zone: null,
   error: null,
   errorCode: null,
 };
@@ -106,7 +107,7 @@ export default function ConservationDashboard({
         const zoneToLoad = dataMode === DATA_MODES.API && !selectedZoneId && session
           ? session.user?.zoneIds?.[0] ?? ''
           : selectedZoneId;
-        const { devices, measurements } = await getZoneData(zoneToLoad, {
+        const { devices, measurements, zone = null } = await getZoneData(zoneToLoad, {
           mode: dataMode,
           signal: activeController.signal,
         });
@@ -118,6 +119,7 @@ export default function ConservationDashboard({
             status: 'success',
             devices,
             measurements,
+            zone,
             error: null,
             errorCode: null,
           });
@@ -357,7 +359,11 @@ export default function ConservationDashboard({
               <h2>{selectedZone.name}</h2>
               <p>{selectedZone.description}</p>
             </div>
-            <ZoneDetails zone={selectedZone} devices={zoneDevices} />
+            <ZoneDetails
+              zone={selectedZone}
+              devices={zoneDevices}
+              zoneLocation={liveState.zone?.zoneId === selectedZoneId ? liveState.zone.location : null}
+            />
           </section>
 
           <AlertsPlaceholder />

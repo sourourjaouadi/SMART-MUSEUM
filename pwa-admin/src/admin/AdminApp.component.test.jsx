@@ -79,7 +79,50 @@ describe('AdminApp', () => {
     expect(within(screen.getByRole('row', { name: /salle-01/ })).getByText('2')).toBeTruthy();
     expect(within(screen.getByRole('row', { name: /salle-02/ })).getByText('1')).toBeTruthy();
     expect(within(screen.getByRole('row', { name: /salle-03/ })).getByText('2')).toBeTruthy();
-    expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(5);
+    expect(table.querySelectorAll('th[scope="col"]')).toHaveLength(6);
+    expect(within(screen.getByRole('row', { name: /salle-01/ })).getByText('36.80650, 10.18150 · Floor 0')).toBeTruthy();
+    expect(within(screen.getByRole('row', { name: /salle-03/ })).getByText('Not set')).toBeTruthy();
+  });
+
+  it('edits zone coordinates in the demo and rejects out-of-range values', async () => {
+    render(<AdminApp />);
+    await screen.findByText('Simulated admin workspace');
+    await openPage('Zones');
+    fireEvent.change(screen.getByLabelText('Zone to edit'), { target: { value: 'salle-03' } });
+    const form = screen.getByRole('form', { name: 'Coordinates for salle-03' });
+    fireEvent.change(within(form).getByLabelText('Latitude'), { target: { value: '95' } });
+    fireEvent.change(within(form).getByLabelText('Longitude'), { target: { value: '10.18' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save location' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Latitude must be a number between -90 and 90/);
+
+    fireEvent.change(within(form).getByLabelText('Latitude'), { target: { value: '36.8067' } });
+    fireEvent.change(within(form).getByLabelText('Floor'), { target: { value: '0' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save location' }));
+    expect(await screen.findByText(/salle-03 coordinates saved in the demo/)).toBeTruthy();
+    expect(within(screen.getByRole('row', { name: /salle-03/ })).getByText('36.80670, 10.18000 · Floor 0')).toBeTruthy();
+  });
+
+  it('assigns a device location and reverts to the zone location without changing its zone', async () => {
+    render(<AdminApp />);
+    await screen.findByText('Simulated admin workspace');
+    await openPage('Device inventory');
+    fireEvent.click(within(screen.getByRole('row', { name: /bme280-01/ })).getByRole('button', { name: 'View details' }));
+    let details = screen.getByRole('region', { name: 'bme280-01' });
+    expect(within(details).getByText('36.80650, 10.18150 · Floor 0 (from zone)')).toBeTruthy();
+
+    const form = within(details).getByRole('form', { name: 'Assign location for bme280-01' });
+    fireEvent.change(within(form).getByLabelText('Latitude'), { target: { value: '36.80652' } });
+    fireEvent.change(within(form).getByLabelText('Longitude'), { target: { value: '10.18148' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save location' }));
+    expect(await screen.findByText(/bme280-01 location assigned in the demo/)).toBeTruthy();
+    details = screen.getByRole('region', { name: 'bme280-01' });
+    expect(within(details).getByText('36.80652, 10.18148 (own position)')).toBeTruthy();
+    expect(within(details).getByText('salle-01')).toBeTruthy();
+
+    fireEvent.click(within(details).getByRole('button', { name: 'Use zone location' }));
+    expect(await screen.findByText(/bme280-01 now uses its zone location/)).toBeTruthy();
+    details = screen.getByRole('region', { name: 'bme280-01' });
+    expect(within(details).getByText('36.80650, 10.18150 · Floor 0 (from zone)')).toBeTruthy();
   });
 
   it.each([

@@ -1,4 +1,7 @@
-export default function ZoneDetails({ zone, devices = [] }) {
+import { formatDeviceLocation, formatLocation } from '../utils/location.js';
+
+export default function ZoneDetails({ zone, devices = [], zoneLocation = null }) {
+  const zoneLocationText = formatLocation(zoneLocation);
   return (
     <section className="panel zone-details" aria-labelledby="zone-details-title">
       <div className="panel__heading">
@@ -8,11 +11,20 @@ export default function ZoneDetails({ zone, devices = [] }) {
         </div>
         <span className="zone-details__tag">{zone.shortLabel}</span>
       </div>
+      {zoneLocationText && (
+        <dl className="zone-details__list">
+          <div className="zone-details__row">
+            <dt>Zone location (WGS84)</dt>
+            <dd>{zoneLocationText}</dd>
+          </div>
+        </dl>
+      )}
       {devices.length > 0 ? (
         devices.map((device, index) => {
           const details = [
             ['Device ID', device.deviceId],
             ['Zone', device.zoneId ?? zone.id],
+            ['Location', formatDeviceLocation(device)],
             ['Gateway ID', device.gatewayId],
             ['Source', device.source],
             ['Status (API)', device.status],

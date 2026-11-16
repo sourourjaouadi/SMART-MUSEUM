@@ -12,6 +12,7 @@ class SecurityBindingTest {
     void userResourcesAreProtectedWhileHealthAndServiceEndpointsRemainSeparate() throws Exception {
         assertNotNull(DeviceResource.class.getAnnotation(UserAuthenticated.class));
         assertNotNull(MeasurementResource.class.getAnnotation(UserAuthenticated.class));
+        assertNotNull(ZoneResource.class.getAnnotation(UserAuthenticated.class));
         assertNotNull(UserResource.class.getAnnotation(UserAuthenticated.class));
         assertNull(HealthResource.class.getAnnotation(UserAuthenticated.class));
 

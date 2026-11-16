@@ -205,7 +205,8 @@ Details: [`middleware/README.md`](middleware/README.md) and the
 
 | Collection | Content |
 |---|---|
-| `devices` | Device identifier, type, zone, gateway, status (`pending`, `active`, `rejected`, `offline`), link to its Thing Description, last activity |
+| `devices` | Device identifier, type, zone, gateway, status (`pending`, `active`, `rejected`, `offline`), link to its Thing Description, last activity, optional own WGS84 location |
+| `zones` | Zone identifier, name, WGS84 latitude/longitude and floor |
 | `measurements` | One document per measurement: device, zone, property, value, unit, `observedAt`, `receivedAt`, source, quality |
 | `things` | W3C WoT Thing Description of each device (JSON-LD) and its declared properties and units |
 | `users` | Accounts: name, email, BCrypt hash, role (`ADMIN` / `CLIENT`), status, authorised zones |
@@ -274,6 +275,9 @@ Base path: `/api`. Full contract: [`contracts/openapi.yaml`](contracts/openapi.y
 | GET | `/api/devices/{deviceId}` | Bearer | Device detail, `Link` header to its Thing Description |
 | POST | `/api/devices/{deviceId}/approve` | Bearer, ADMIN | Approve a device (`pending` → `active`) |
 | POST | `/api/devices/{deviceId}/reject` | Bearer, ADMIN | Reject a device |
+| PUT / DELETE | `/api/devices/{deviceId}/location` | Bearer, ADMIN | Set or clear an approved device's own WGS84 location (its `zoneId` never changes) |
+| GET | `/api/zones`, `/api/zones/{zoneId}` | Bearer | Zones and their WGS84 coordinates (CLIENT: only its zones) |
+| PUT | `/api/zones/{zoneId}` | Bearer, ADMIN | Create or update a zone's name and coordinates |
 | GET | `/api/measurements/latest?zoneId=` | Bearer | Latest measurement per device and property in a zone |
 | GET | `/api/measurements?deviceId=&property=&from=&to=&limit=` | Bearer | Measurement history |
 | GET | `/api/things`, `/api/things/{deviceId}` | Bearer, ADMIN | W3C WoT Thing Descriptions (`application/td+json`) |
@@ -458,6 +462,7 @@ Node-RED flow is not currently versioned in this repository.
 - Persistence with Jakarta NoSQL entities and Jakarta Data repositories on MongoDB.
 - W3C WoT Thing Descriptions, device discovery with ADMIN approval, RFC 8288 `Link` header to the Thing Description.
 - Accounts, BCrypt, JWT sign-in, ADMIN/CLIENT roles and zone-based authorization.
+- Geolocation: WGS84 zone coordinates and device location (own or inherited from the zone); DEV seeds sample Tunis coordinates. See [`middleware/README.md`](middleware/README.md).
 - Client PWA connected to the middleware (sign-in, devices, latest and historical measurements), with mock mode, offline states and PWA installation.
 - Admin PWA prototype on mock data.
 - Middleware CI on GitHub Actions.

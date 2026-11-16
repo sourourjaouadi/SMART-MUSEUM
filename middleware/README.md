@@ -125,7 +125,7 @@ OpenSSL with the local root CA file.
 | JWT_ACCESS_TOKEN_SECONDS | 900 | Duree de vie du jeton (60 a 3600 secondes) |
 | BOOTSTRAP_ADMIN_NAME / EMAIL / PASSWORD | (tous optionnels, ensemble) | Cree le premier ADMIN actif s'il n'existe pas; variables serveur seulement |
 | MQTT_BROKER_URI | required | MQTT base used in seeded Thing Description forms |
-| SEED_DEVICES | required; DEV true, PROD false | Seeds two sample devices only in DEV |
+| SEED_DEVICES | required; DEV true, PROD false | Seeds two sample devices and their zones (sample Tunis coordinates) only in DEV |
 | SMART_MUSEUM_ENV | required: dev or prod | Startup safety profile |
 | TLS_KEYSTORE_PATH / TLS_KEYSTORE_PASSWORD | required for local WildFly HTTPS | Local PKCS#12 path and password; generated/configured by `deployment/prepare-local-https.ps1`, stored only in ignored `dev.env` |
 
@@ -143,7 +143,7 @@ JNoSQL 1.1.20 requires Jakarta Data 1.0.2. The Maven dependency is aligned to
 
 ## Persistance : Jakarta NoSQL + Jakarta Data
 - Entites Jakarta NoSQL (`@Entity`, `@Id`, `@Column`) dans `core/entity/` : `DeviceEntity` (devices),
-  `MeasurementEntity` (measurements), `ThingEntity` (things).
+  `MeasurementEntity` (measurements), `ThingEntity` (things), `ZoneEntity` (zones).
 - Repositories Jakarta Data (`@Repository`, `BasicRepository`, `@Insert`, requetes par nom de methode)
   dans `core/data/`, implementes a l'execution par Eclipse JNoSQL 1.1 (Jakarta Data 1.0).
 - Configuration per application in `core/src/main/resources/META-INF/` and
@@ -175,6 +175,37 @@ Chaque appareil a une Thing Description W3C WoT 1.1 en JSON-LD 1.1 (collection `
 
 `GET /api/devices/{deviceId}` renvoie un en-tete RFC 8288
 `Link: <.../api/things/{deviceId}>; rel="describedby"; type="application/td+json"`.
+
+## Geolocalisation des zones et des appareils
+Systeme de coordonnees : WGS84 (latitude/longitude en degres decimaux) et numero d'etage
+optionnel (`floor`). Une zone (collection `zones`) a un `zoneId`, un `name` et une `location`.
+Un appareil a soit sa localisation propre, soit herite de celle de sa zone : `GET /api/devices`
+renvoie alors les champs optionnels `location` et `locationSource` (`device` ou `zone`), absents
+si aucune coordonnee n'est connue. Affecter une localisation ne modifie jamais le `zoneId`
+(lie a la TD et au topic MQTT).
+
+| Methode | Endpoint | Acces |
+|---|---|---|
+| GET | `/api/zones` | Bearer ; ADMIN toutes les zones, CLIENT seulement ses zones |
+| GET | `/api/zones/{zoneId}` | Bearer ; zone non attribuee au CLIENT -> 403 (avant tout 404) |
+| PUT | `/api/zones/{zoneId}` | ADMIN ; corps `{ "name", "location": { "latitude", "longitude", "floor" } }`, idempotent |
+| PUT | `/api/devices/{deviceId}/location` | ADMIN ; corps `{ "latitude", "longitude", "floor" }` |
+| DELETE | `/api/devices/{deviceId}/location` | ADMIN ; l'appareil herite a nouveau de sa zone |
+
+Validation (CORE, `LocationService`) : latitude dans [-90, 90], longitude dans [-180, 180],
+toutes deux obligatoires ; `floor` entier dans [-10, 200] ; `name` de 1 a 100 caracteres ->
+sinon 400. Zone ou appareil inconnu -> 404. Appareil `pending` ou `rejected` -> 409
+(`active` et `offline` ont ete approuves). Les routes internes correspondantes sont
+`/internal/core/zones...` et `/internal/core/devices/{id}/location`.
+
+Avec `SEED_DEVICES=true` (DEV), `SeedBean` cree `salle-01` et `salle-02` avec des
+**coordonnees d'exemple fictives dans le centre de Tunis** (pas un batiment reel), seulement
+si la zone n'existe pas : les modifications ADMIN sont conservees au redemarrage.
+
+Demonstration : dossier `Geolocalisation` de `postman/smart-museum-v1.postman_collection.json`.
+Renseigner localement `adminEmail`/`adminPassword` (jamais dans Git), executer `Login ADMIN`
+puis les requetes dans l'ordre contre `{{apiUrl}}` (`https://api.smartmuseum.test:8443`).
+Postman doit faire confiance a l'AC mkcert locale (`%LOCALAPPDATA%\mkcert\rootCA.pem`).
 
 ## Authentification et autorisation des PWA
 
