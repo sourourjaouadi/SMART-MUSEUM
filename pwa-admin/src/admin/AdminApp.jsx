@@ -14,6 +14,8 @@ const NAV = [
 ];
 const TITLES = Object.fromEntries(NAV);
 const STATUS_FILTERS = ['active', 'pending', 'offline', 'maintenance', 'rejected'];
+// Device statuses defined by the middleware contract (no mock-only "maintenance").
+const API_STATUS_FILTERS = ['active', 'pending', 'offline', 'rejected'];
 
 function Metric({ label, value, note }) {
   return (
@@ -241,7 +243,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
 
   function renderContent() {
     if (state === 'loading') {
-      return <div className="admin-state" role="status">Loading simulated admin data…</div>;
+      return <div className="admin-state" role="status">{isDemo ? 'Loading simulated admin data…' : 'Loading admin data from the API…'}</div>;
     }
     if (state === 'error') {
       return (
@@ -255,14 +257,21 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
     if (page === 'dashboard') {
       const online = devices.filter((device) => device.connectivity === 'online').length;
       const offline = devices.filter((device) => device.connectivity === 'offline').length;
+      const byStatus = (status) => devices.filter((device) => device.status === status).length;
       return <>
-        <div className="admin-metrics">
+        {isDemo ? <div className="admin-metrics">
           <Metric label="Total registered devices" value={devices.length} note="All inventory records, including pending" />
           <Metric label="Online devices" value={online} note="Explicit online mock connectivity only" />
           <Metric label="Offline devices" value={offline} note="Explicit offline mock connectivity only" />
           <Metric label="Pending devices" value={pending.length} note="Not counted as online or offline" />
           <Metric label="Active zones" value={activeZones.length} note="Zones marked active in mock data" />
-        </div>
+        </div> : <div className="admin-metrics">
+          <Metric label="Total registered devices" value={devices.length} note="All devices known to the middleware" />
+          <Metric label="Active devices" value={byStatus('active')} note="Approved; their measurements are accepted" />
+          <Metric label="Pending devices" value={pending.length} note="Discovered, waiting for an ADMIN decision" />
+          <Metric label="Offline or rejected" value={byStatus('offline') + byStatus('rejected')} note={`${byStatus('offline')} offline · ${byStatus('rejected')} rejected`} />
+          <Metric label="Registered zones" value={zones.filter((zone) => !zone.unregistered).length} note="Zones with a record in the middleware" />
+        </div>}
         <section className="admin-panel">
           <div className="admin-panel__heading">
             <div><p className="admin-eyebrow">Review queue</p><h2>Devices awaiting approval</h2></div>
@@ -270,7 +279,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
           </div>
           {pending.length ? pending.map((device) => (
             <ApprovalRow key={device.deviceId} device={device} processingId={processingId} onDecision={decide} />
-          )) : <div className="admin-empty"><strong>No pending devices</strong><span>New demo devices will appear here.</span></div>}
+          )) : <div className="admin-empty"><strong>No pending devices</strong><span>{isDemo ? 'New demo devices will appear here.' : 'Devices announced through discovery will appear here.'}</span></div>}
           {actionError && <p className="admin-inline-error" role="alert">{actionError}</p>}
         </section>
         <section className="admin-panel">
@@ -303,15 +312,15 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
         </div>
         <div className="admin-toolbar">
           <label className="admin-search"><span className="sr-only">Search devices</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ID, type, zone…" /></label>
-          <label className="admin-filter"><span className="sr-only">Filter status</span><select aria-label="Filter by status" value={isApprovals ? 'pending' : statusFilter} disabled={isApprovals} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUS_FILTERS.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+          <label className="admin-filter"><span className="sr-only">Filter status</span><select aria-label="Filter by status" value={isApprovals ? 'pending' : statusFilter} disabled={isApprovals} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{(isDemo ? STATUS_FILTERS : API_STATUS_FILTERS).map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
           <label className="admin-filter"><span className="sr-only">Filter zone</span><select aria-label="Filter by zone" value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value)}><option value="all">All zones</option>{zones.map((zone) => <option key={zone.zoneId} value={zone.zoneId}>{zone.zoneId}</option>)}</select></label>
           <button type="button" className="admin-button admin-button--quiet" onClick={resetDeviceFilters} disabled={!query && statusFilter === 'all' && zoneFilter === 'all'}>Reset filters</button>
         </div>
         {isApprovals ? rows.length ? rows.map((device) => (
           <ApprovalRow key={device.deviceId} device={device} processingId={processingId} onDecision={decide} />
-        )) : <div className="admin-empty"><strong>No pending approvals match these filters</strong><span>Reset filters or wait for another demo device.</span></div> : (
+        )) : <div className="admin-empty"><strong>No pending approvals match these filters</strong><span>{isDemo ? 'Reset filters or wait for another demo device.' : 'Reset filters or wait for another discovered device.'}</span></div> : (
           <>
-            <AdminTable columns={inventoryColumns} rows={inventoryRows} caption="Device inventory" empty="No matching devices" emptyHint="Change or reset the search and filters." />
+            <AdminTable columns={isDemo ? inventoryColumns : apiInventoryColumns} rows={inventoryRows} caption="Device inventory" empty="No matching devices" emptyHint="Change or reset the search and filters." />
             {selectedDeviceId && (() => {
               const selected = devices.find((device) => device.deviceId === selectedDeviceId);
               if (!selected) return null;
@@ -324,9 +333,13 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
                   <Detail label="Location (WGS84)" value={describeDeviceLocation(selected, zones)} />
                   <Detail label="Gateway ID" value={selected.gatewayId} />
                   <Detail label="Status" value={selected.status} />
-                  <Detail label="Connectivity (mock)" value={selected.connectivity ?? 'Not specified'} />
+                  {isDemo
+                    ? <Detail label="Connectivity (mock)" value={selected.connectivity ?? 'Not specified'} />
+                    : <Detail label="Thing Description" value={selected.thingId ?? 'Not registered'} />}
                   <Detail label="Last seen" value={formatTimestamp(selected.lastSeenAt)} />
-                  <Detail label="Measurements" value="No measurement records are included in this admin mock dataset." />
+                  <Detail label="Measurements" value={isDemo
+                    ? 'No measurement records are included in this admin mock dataset.'
+                    : 'Measurements are shown in the Client PWA for the zones of a CLIENT account.'} />
                 </dl>
                 <LocationForm
                   key={`${selected.deviceId}-${JSON.stringify(selected.location ?? null)}`}
@@ -419,6 +432,7 @@ function Detail({ label, value }) {
 
 const deviceColumns = [['deviceId', 'Device ID'], ['type', 'Type'], ['zoneId', 'Zone'], ['gatewayId', 'Gateway'], ['status', 'Status'], ['lastSeenAt', 'Last seen']];
 const inventoryColumns = [['deviceId', 'Device ID'], ['type', 'Type'], ['zoneId', 'Zone'], ['gatewayId', 'Gateway'], ['status', 'Status'], ['connectivity', 'Connectivity'], ['lastSeenAt', 'Last seen'], ['action', 'Details']];
+const apiInventoryColumns = inventoryColumns.filter(([key]) => key !== 'connectivity');
 const zoneColumns = [['zoneId', 'Zone ID'], ['name', 'Name'], ['floor', 'Floor'], ['coordinates', 'Coordinates (WGS84)'], ['devices', 'Devices'], ['status', 'Status']];
 const thresholdColumns = [['label', 'Measurement'], ['property', 'Property'], ['min', 'Minimum'], ['max', 'Maximum'], ['unit', 'Unit']];
 const userColumns = [['name', 'Name'], ['email', 'Email'], ['accessRole', 'Application role'], ['jobTitle', 'Job title'], ['status', 'Entry status']];
