@@ -7,12 +7,29 @@ export const MOCK_DATA = {
       zoneId: 'salle-01',
       gatewayId: 'gw-01',
       source: 'real',
+      location: { latitude: 36.8065, longitude: 10.1815, floor: 0 },
+      locationSource: 'zone',
     },
     {
       deviceId: 'sim-bme280-02',
       zoneId: 'salle-02',
       gatewayId: 'gw-sim',
       source: 'simulated',
+      location: { latitude: 36.80664, longitude: 10.18175, floor: 1 },
+      locationSource: 'device',
+    },
+  ],
+  // Sample WGS84 coordinates in central Tunis, not a real building.
+  zones: [
+    {
+      zoneId: 'salle-01',
+      name: 'Textile gallery',
+      location: { latitude: 36.8065, longitude: 10.1815, floor: 0 },
+    },
+    {
+      zoneId: 'salle-02',
+      name: 'Manuscript room',
+      location: { latitude: 36.80662, longitude: 10.18172, floor: 1 },
     },
   ],
   measurements: [

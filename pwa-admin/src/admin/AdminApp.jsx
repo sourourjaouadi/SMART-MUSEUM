@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAdminSnapshot, setDeviceDecision } from './services/adminService.js';
+import {
+  getAdminSnapshot,
+  setDeviceDecision,
+  setDeviceLocation,
+  setZoneLocation,
+} from './services/adminService.js';
 import './admin.css';
 
 const NAV = [
@@ -59,6 +64,53 @@ function AdminTable({ columns, rows, empty, emptyHint, caption }) {
   );
 }
 
+function formatCoordinates(location) {
+  if (!Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) return null;
+  const text = `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
+  return Number.isInteger(location.floor) ? `${text} · Floor ${location.floor}` : text;
+}
+
+function describeDeviceLocation(device, zones) {
+  const own = formatCoordinates(device.location);
+  if (own) return `${own} (own position)`;
+  const inherited = formatCoordinates(zones.find((zone) => zone.zoneId === device.zoneId)?.location);
+  return inherited ? `${inherited} (from zone)` : 'Not set';
+}
+
+function LocationForm({ label, initial, busy, onSave, onClear, clearLabel }) {
+  const [values, setValues] = useState({
+    latitude: initial?.latitude ?? '',
+    longitude: initial?.longitude ?? '',
+    floor: initial?.floor ?? '',
+  });
+  const field = (name, text, inputMode) => (
+    <label className="admin-location-form__field">
+      <span>{text}</span>
+      <input
+        name={name}
+        inputMode={inputMode}
+        value={values[name]}
+        onChange={(event) => setValues((current) => ({ ...current, [name]: event.target.value }))}
+      />
+    </label>
+  );
+  return (
+    <form
+      className="admin-location-form"
+      aria-label={label}
+      onSubmit={(event) => { event.preventDefault(); onSave(values); }}
+    >
+      {field('latitude', 'Latitude', 'decimal')}
+      {field('longitude', 'Longitude', 'decimal')}
+      {field('floor', 'Floor', 'numeric')}
+      <div className="admin-actions">
+        {onClear && <button type="button" className="admin-button admin-button--quiet" disabled={busy} onClick={onClear}>{clearLabel}</button>}
+        <button type="submit" className="admin-button" disabled={busy}>{busy ? 'Saving…' : 'Save location'}</button>
+      </div>
+    </form>
+  );
+}
+
 function formatTimestamp(value) {
   if (!value) return 'Not available';
   const date = new Date(value);
@@ -77,6 +129,7 @@ export default function AdminApp() {
   const [processingId, setProcessingId] = useState(null);
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
+  const [editZoneId, setEditZoneId] = useState(null);
 
   async function loadSnapshot() {
     setState('loading');
@@ -144,6 +197,30 @@ export default function AdminApp() {
       const updatedDevices = await setDeviceDecision(devices, deviceId, decision);
       setData((current) => ({ ...current, devices: updatedDevices }));
       setNotice(`${deviceId} ${decision} in the demo. This action was not sent to a server.`);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function saveLocation(kind, id, values) {
+    if (processingId) return;
+    setProcessingId(`location:${id}`);
+    setActionError('');
+    setNotice('');
+    try {
+      if (kind === 'zone') {
+        const updatedZones = await setZoneLocation(zones, id, values);
+        setData((current) => ({ ...current, zones: updatedZones }));
+        setNotice(`${id} coordinates saved in the demo. This change was not sent to a server.`);
+      } else {
+        const updatedDevices = await setDeviceLocation(devices, id, values);
+        setData((current) => ({ ...current, devices: updatedDevices }));
+        setNotice(values
+          ? `${id} location assigned in the demo. This change was not sent to a server.`
+          : `${id} now uses its zone location in the demo. This change was not sent to a server.`);
+      }
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -239,12 +316,22 @@ export default function AdminApp() {
                   <Detail label="Device ID" value={selected.deviceId} />
                   <Detail label="Device type" value={selected.type} />
                   <Detail label="Zone" value={selected.zoneId} />
+                  <Detail label="Location (WGS84)" value={describeDeviceLocation(selected, zones)} />
                   <Detail label="Gateway ID" value={selected.gatewayId} />
                   <Detail label="Status" value={selected.status} />
                   <Detail label="Connectivity (mock)" value={selected.connectivity ?? 'Not specified'} />
                   <Detail label="Last seen" value={formatTimestamp(selected.lastSeenAt)} />
                   <Detail label="Measurements" value="No measurement records are included in this admin mock dataset." />
                 </dl>
+                <LocationForm
+                  key={`${selected.deviceId}-${JSON.stringify(selected.location ?? null)}`}
+                  label={`Assign location for ${selected.deviceId}`}
+                  initial={selected.location}
+                  busy={processingId === `location:${selected.deviceId}`}
+                  onSave={(values) => saveLocation('device', selected.deviceId, values)}
+                  onClear={selected.location ? () => saveLocation('device', selected.deviceId, null) : undefined}
+                  clearLabel="Use zone location"
+                />
               </section>;
             })()}
           </>
@@ -256,9 +343,27 @@ export default function AdminApp() {
     if (page === 'zones') {
       const zoneRows = zones.map((zone) => ({
         ...zone,
+        coordinates: formatCoordinates(zone.location) ?? 'Not set',
         devices: devices.filter((device) => device.zoneId === zone.zoneId).length,
       }));
-      return <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Museum layout</p><h2>Zone management</h2></div></div><AdminTable columns={zoneColumns} rows={zoneRows} caption="Museum zone inventory" empty="No zones configured" emptyHint="No zones are present in the mock data." /></section>;
+      const editedZone = zones.find((zone) => zone.zoneId === editZoneId) ?? zones[0];
+      return <section className="admin-panel">
+        <div className="admin-panel__heading"><div><p className="admin-eyebrow">Museum layout</p><h2>Zone management</h2></div></div>
+        <AdminTable columns={zoneColumns} rows={zoneRows} caption="Museum zone inventory" empty="No zones configured" emptyHint="No zones are present in the mock data." />
+        {editedZone && <div className="admin-device-details">
+          <div className="admin-panel__heading"><div><p className="admin-eyebrow">Geolocation</p><h3>Edit zone coordinates</h3></div>
+            <label className="admin-filter"><span className="sr-only">Zone to edit</span><select aria-label="Zone to edit" value={editedZone.zoneId} onChange={(event) => setEditZoneId(event.target.value)}>{zones.map((zone) => <option key={zone.zoneId} value={zone.zoneId}>{zone.zoneId}</option>)}</select></label>
+          </div>
+          <LocationForm
+            key={`${editedZone.zoneId}-${JSON.stringify(editedZone.location ?? null)}`}
+            label={`Coordinates for ${editedZone.zoneId}`}
+            initial={editedZone.location}
+            busy={processingId === `location:${editedZone.zoneId}`}
+            onSave={(values) => saveLocation('zone', editedZone.zoneId, values)}
+          />
+        </div>}
+        {actionError && <p className="admin-inline-error" role="alert">{actionError}</p>}
+      </section>;
     }
     if (page === 'thresholds') {
       return <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Conservation limits</p><h2>Threshold management</h2></div></div><p className="admin-copy">These illustrative limits are read-only and are not connected to alerts or measurement evaluation.</p><AdminTable columns={thresholdColumns} rows={data.thresholds} caption="Illustrative environmental thresholds" empty="No thresholds configured" emptyHint="No threshold records are present in the mock data." /></section>;
@@ -304,6 +409,6 @@ function Detail({ label, value }) {
 
 const deviceColumns = [['deviceId', 'Device ID'], ['type', 'Type'], ['zoneId', 'Zone'], ['gatewayId', 'Gateway'], ['status', 'Status'], ['lastSeenAt', 'Last seen']];
 const inventoryColumns = [['deviceId', 'Device ID'], ['type', 'Type'], ['zoneId', 'Zone'], ['gatewayId', 'Gateway'], ['status', 'Status'], ['connectivity', 'Connectivity'], ['lastSeenAt', 'Last seen'], ['action', 'Details']];
-const zoneColumns = [['zoneId', 'Zone ID'], ['name', 'Name'], ['floor', 'Location'], ['devices', 'Devices'], ['status', 'Status']];
+const zoneColumns = [['zoneId', 'Zone ID'], ['name', 'Name'], ['floor', 'Floor'], ['coordinates', 'Coordinates (WGS84)'], ['devices', 'Devices'], ['status', 'Status']];
 const thresholdColumns = [['label', 'Measurement'], ['property', 'Property'], ['min', 'Minimum'], ['max', 'Maximum'], ['unit', 'Unit']];
 const userColumns = [['name', 'Name'], ['email', 'Email'], ['accessRole', 'Application role'], ['jobTitle', 'Job title'], ['status', 'Entry status']];

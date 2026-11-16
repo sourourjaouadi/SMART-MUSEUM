@@ -9,6 +9,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import tn.supcom.museum.core.data.DeviceData;
 import tn.supcom.museum.core.error.ApiException;
+import tn.supcom.museum.core.geo.LocationService;
 import tn.supcom.museum.core.model.*;
 import tn.supcom.museum.core.repository.*;
 import tn.supcom.museum.core.validation.ValidationChain;
@@ -32,18 +33,28 @@ public class InternalCoreResource {
     @Inject DiscoveryService discovery;
     @Inject ValidationChain validation;
     @Inject DeviceData deviceData;
+    @Inject LocationService locations;
 
     @GET @Path("/health")
     public Map<String, String> health() {
         try { deviceData.findById("__health__"); return Map.of("status", "UP", "mongo", "UP"); }
         catch (RuntimeException e) { return Map.of("status", "UP", "mongo", "DOWN"); }
     }
-    @GET @Path("/devices") public List<Device> devices(@QueryParam("status") String status) { return devices.findByStatus(status); }
-    @GET @Path("/devices/{id}") public Device device(@PathParam("id") String id) {
-        return devices.findById(id).orElseThrow(() -> ApiException.notFound("Appareil inconnu : " + id));
+    @GET @Path("/devices") public List<Device> devices(@QueryParam("status") String status) {
+        return locations.resolveAll(devices.findByStatus(status));
     }
-    @POST @Path("/devices/{id}/approve") public Device approve(@PathParam("id") String id) { return discovery.approve(id); }
-    @POST @Path("/devices/{id}/reject") public Device reject(@PathParam("id") String id) { return discovery.reject(id); }
+    @GET @Path("/devices/{id}") public Device device(@PathParam("id") String id) {
+        return locations.resolve(devices.findById(id).orElseThrow(() -> ApiException.notFound("Appareil inconnu : " + id)));
+    }
+    @POST @Path("/devices/{id}/approve") public Device approve(@PathParam("id") String id) { return locations.resolve(discovery.approve(id)); }
+    @POST @Path("/devices/{id}/reject") public Device reject(@PathParam("id") String id) { return locations.resolve(discovery.reject(id)); }
+    @PUT @Path("/devices/{id}/location") public Device assignLocation(@PathParam("id") String id, Location location) {
+        return locations.assign(id, location);
+    }
+    @DELETE @Path("/devices/{id}/location") public Device clearLocation(@PathParam("id") String id) { return locations.clear(id); }
+    @GET @Path("/zones") public List<Zone> zones() { return locations.zones(); }
+    @GET @Path("/zones/{id}") public Zone zone(@PathParam("id") String id) { return locations.zone(id); }
+    @PUT @Path("/zones/{id}") public Zone saveZone(@PathParam("id") String id, Zone zone) { return locations.saveZone(id, zone); }
     @GET @Path("/measurements/latest") public List<Measurement> latest(@QueryParam("zoneId") String zoneId) { return measurements.findLatest(zoneId); }
     @GET @Path("/measurements/history") public List<Measurement> history(@QueryParam("deviceId") String deviceId,
             @QueryParam("property") String property, @QueryParam("from") String from, @QueryParam("to") String to,

@@ -2,6 +2,7 @@ import {
   getDevices as getApiDevices,
   getLatestMeasurements as getApiLatestMeasurements,
   getMeasurements as getApiMeasurements,
+  getZones as getApiZones,
 } from './api.js';
 import { MOCK_DATA } from './mockData.js';
 
@@ -49,6 +50,20 @@ export function getAvailableDevices(mode, apiDevices = []) {
   throw new TypeError(`Unsupported data mode: ${mode}`);
 }
 
+/**
+ * Zone metadata (name, WGS84 location) is optional: if /api/zones is unavailable
+ * the dashboard still shows devices and measurements, with `zone: null`.
+ */
+async function getApiZone(zoneId, signal) {
+  try {
+    const zones = await getApiZones({ signal });
+    return zones.find((zone) => zone.zoneId === zoneId) ?? null;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    return null;
+  }
+}
+
 export async function getZoneData(zoneId, { mode = DEFAULT_DATA_MODE, signal } = {}) {
   if (mode === DATA_MODES.MOCK) {
     return {
@@ -56,6 +71,7 @@ export async function getZoneData(zoneId, { mode = DEFAULT_DATA_MODE, signal } =
       measurements: MOCK_DATA.measurements.filter(
         (measurement) => measurement.zoneId === zoneId,
       ),
+      zone: MOCK_DATA.zones.find((zone) => zone.zoneId === zoneId) ?? null,
     };
   }
 
@@ -63,13 +79,16 @@ export async function getZoneData(zoneId, { mode = DEFAULT_DATA_MODE, signal } =
     throw new TypeError(`Unsupported data mode: ${mode}`);
   }
 
-  const devices = await getApiDevices({ signal });
+  const [devices, zone] = await Promise.all([
+    getApiDevices({ signal }),
+    getApiZone(zoneId, signal),
+  ]);
   if (!devices.some((device) => device?.zoneId === zoneId)) {
-    return { devices, measurements: [] };
+    return { devices, measurements: [], zone };
   }
 
   const measurements = await getApiLatestMeasurements(zoneId, { signal });
-  return { devices, measurements };
+  return { devices, measurements, zone };
 }
 
 export async function getMeasurementHistory(
