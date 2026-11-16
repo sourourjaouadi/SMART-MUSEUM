@@ -54,9 +54,9 @@
 | :--- | :---: | :---: | :---: |
 | **Passerelle IoT / Node-RED / Edge** | 10 % | 90 % | 0 % |
 | **Backend / API REST / Middleware** | 10 % | 90 % | 0 % |
-| **Sécurité (IAM / Keycloak / mTLS)** | ________ % | ________ % | ________ % |
+| **Sécurité (IAM / Keycloak / mTLS)** | 5 % | 95 % | 0 % |
 | **Frontend / PWA** | 10 % | 90 % | 0 % |
-| **Scripts d'Infra / Déploiement** | ________ % | ________ % | ________ % |
+| **Scripts d'Infra / Déploiement** | 10 % | 90 % | 0 % |
 
 ---
 
@@ -64,4 +64,4 @@
 En validant ce fichier sur notre dépôt GitHub, nous certifions sur l'honneur que les déclarations ci-dessus sont exactes, sincères et reflètent fidèlement notre processus de développement. Nous sommes conscients que la falsification de ce document ou la non-maîtrise technique du code déclaré comme "écrit par l'équipe" lors des soutenances entraînera une **pénalité immédiate et sévère sur la note globale**.
 
 *   [x] **Lu et approuvé par l'ensemble des membres de l'équipe.**
-*   **Date de dernière mise à jour :** 09/11/2026
+*   **Date de dernière mise à jour :** 16/11/2026
