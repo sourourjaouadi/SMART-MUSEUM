@@ -31,6 +31,16 @@ public class DeviceEntity {
     @Column
     public Date lastSeenAt;
 
+    /** Localisation propre (WGS84), optionnelle : absente, l'appareil herite des coordonnees de sa zone. */
+    @Column
+    public Double latitude;
+
+    @Column
+    public Double longitude;
+
+    @Column
+    public Integer floor;
+
     public DeviceEntity() {
     }
 }
