@@ -51,7 +51,14 @@ test('returns empty collections for a zone without mock records', async () => {
   assert.deepEqual(await getZoneData('unknown-zone', { mode: DATA_MODES.MOCK }), {
     devices: [],
     measurements: [],
+    zone: null,
   });
+});
+
+test('returns the selected mock zone with its sample WGS84 coordinates', async () => {
+  const { zone } = await getZoneData('salle-01', { mode: DATA_MODES.MOCK });
+  assert.equal(zone.name, 'Textile gallery');
+  assert.deepEqual(zone.location, { latitude: 36.8065, longitude: 10.1815, floor: 0 });
 });
 
 test('rejects unsupported data modes', async () => {

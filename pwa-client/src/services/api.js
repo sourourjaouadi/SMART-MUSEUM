@@ -144,6 +144,48 @@ function validateDevices(payload) {
   return payload;
 }
 
+function isValidLocation(location) {
+  return (
+    location != null &&
+    typeof location === 'object' &&
+    typeof location.latitude === 'number' &&
+    Number.isFinite(location.latitude) &&
+    location.latitude >= -90 &&
+    location.latitude <= 90 &&
+    typeof location.longitude === 'number' &&
+    Number.isFinite(location.longitude) &&
+    location.longitude >= -180 &&
+    location.longitude <= 180 &&
+    (location.floor == null || Number.isInteger(location.floor))
+  );
+}
+
+function validateZones(payload) {
+  if (!Array.isArray(payload)) {
+    throw new ApiError('/api/zones returned an invalid response; expected an array.', {
+      code: 'INVALID_RESPONSE',
+    });
+  }
+
+  const invalidIndex = payload.findIndex(
+    (zone) =>
+      !zone ||
+      typeof zone !== 'object' ||
+      Array.isArray(zone) ||
+      typeof zone.zoneId !== 'string' ||
+      (zone.name != null && typeof zone.name !== 'string') ||
+      (zone.location != null && !isValidLocation(zone.location)),
+  );
+
+  if (invalidIndex !== -1) {
+    throw new ApiError(`/api/zones returned an invalid zone at index ${invalidIndex}.`, {
+      code: 'INVALID_RESPONSE',
+    });
+  }
+
+  return payload;
+}
+
 export function createApiClient({
   baseUrl = import.meta.env?.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL,
   timeoutMs = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS,
@@ -338,6 +380,11 @@ export function createApiClient({
       });
     },
 
+    /** Zones authorized for the signed-in user, with optional WGS84 coordinates. */
+    async getZones(options) {
+      return validateZones(await getJson('/api/zones', options));
+    },
+
     async getLatestMeasurements(zoneId, options) {
       if (typeof zoneId !== 'string' || zoneId.length === 0) {
         throw new TypeError('zoneId must be a non-empty string.');
@@ -385,6 +432,7 @@ export const getHealth = (...args) => apiClient.getHealth(...args);
 export const login = (...args) => apiClient.login(...args);
 export const getDevices = (...args) => apiClient.getDevices(...args);
 export const getDevice = (...args) => apiClient.getDevice(...args);
+export const getZones = (...args) => apiClient.getZones(...args);
 export const getLatestMeasurements = (...args) =>
   apiClient.getLatestMeasurements(...args);
 export const getMeasurements = (...args) => apiClient.getMeasurements(...args);
