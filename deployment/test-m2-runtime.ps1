@@ -38,12 +38,24 @@ function Send-M2HttpsRequest([string]$HostName, [string]$Method, [string]$Path,
         $request += "Content-Length: 0`r`n`r`n"
     } else { $request += "`r`n" }
 
+    # Pipe the request as BOM-less UTF-8 (matching Content-Length). Windows
+    # PowerShell writes native stdin with the console input encoding; a host
+    # using UTF-8 with BOM would prefix the request line with U+FEFF, which
+    # WildFly rejects as HTTP 400.
+    $utf8NoBom = [Text.UTF8Encoding]::new($false)
+    $oldInputEncoding = [Console]::InputEncoding
+    $OutputEncoding = $utf8NoBom
     $oldPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $response = $request | & $script:openssl s_client -quiet -connect "${HostName}:8443" `
-        -servername $HostName -verify_hostname $HostName -verify_return_error -CAfile $script:caFile 2>$null
-    $exitCode = $LASTEXITCODE
-    $ErrorActionPreference = $oldPreference
+    try {
+        [Console]::InputEncoding = $utf8NoBom
+        $response = $request | & $script:openssl s_client -quiet -connect "${HostName}:8443" `
+            -servername $HostName -verify_hostname $HostName -verify_return_error -CAfile $script:caFile 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        [Console]::InputEncoding = $oldInputEncoding
+        $ErrorActionPreference = $oldPreference
+    }
     if ($exitCode -ne 0) { throw "TLS verification or HTTPS request failed for ${HostName}${Path}." }
     return ($response -join "`n")
 }
