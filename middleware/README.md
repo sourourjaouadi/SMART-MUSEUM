@@ -31,14 +31,18 @@ From the repository root:
 ```powershell
 docker compose -f middleware/docker-compose.m2-sandbox.yml up -d
 docker inspect museum-m2-sandbox-mongo --format '{{.State.Status}} {{json .NetworkSettings.Ports}}'
-.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin
+.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin -WriteAcceptanceCredentials
 ```
 
 The initializer creates random service and JWT secrets without printing them,
 then prompts for a sandbox admin password without echoing it. Keep `dev.env`
 local; `.env` files are not automatically loaded by WildFly. The repo
 `.gitignore` excludes `middleware/config/*.env`. Omit `-CreateBootstrapAdmin`
-to skip account creation.
+to skip account creation. Each developer has their own admin and secrets;
+`-WriteAcceptanceCredentials` (or `deployment/set-acceptance-credentials.ps1`)
+writes the local file used by the acceptance test. Changing an existing admin
+password is explained under "Accounts and credentials" in
+`deployment/README.md`.
 
 If `dev.env` was created before the independent services were added, update
 only its new internal token with:
