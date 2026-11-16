@@ -65,6 +65,10 @@ describe('HistoricalMeasurements', () => {
   });
 });
 
+// MeasurementCard formats values with the runtime locale (e.g. "19,4" on fr-FR).
+const localNumber = (value) =>
+  new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+
 describe('ConservationDashboard', () => {
   it('updates zone measurements and device details when the zone changes', async () => {
     getZoneData.mockImplementation(async (zoneId) => ({
@@ -77,7 +81,7 @@ describe('ConservationDashboard', () => {
     render(<ConservationDashboard initialMode={DATA_MODES.MOCK} />);
 
     expect(await screen.findByText('bme280-01')).toBeTruthy();
-    expect(screen.getByText('19.4')).toBeTruthy();
+    expect(screen.getByText(localNumber(19.4))).toBeTruthy();
     expect(screen.getByText('°C')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Monitoring zone'), {
@@ -85,7 +89,7 @@ describe('ConservationDashboard', () => {
     });
 
     expect((await screen.findAllByText('sim-bme280-02')).length).toBeGreaterThan(0);
-    expect(screen.getByText('20.1')).toBeTruthy();
+    expect(screen.getByText(localNumber(20.1))).toBeTruthy();
     expect(screen.getAllByText('Simulated').length).toBeGreaterThan(0);
     expect(screen.getByText('°C')).toBeTruthy();
   });
