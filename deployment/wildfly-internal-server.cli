@@ -1,0 +1,28 @@
+# Internal Undertow server for the CORE and IAM services, on 127.0.0.1:8080 only.
+# Run offline (WildFly stopped) through deployment/configure-wildfly-ports.ps1.
+# Existing resources are left untouched, so re-running it is harmless.
+#
+# CORE and IAM select this server in their jboss-web.xml (server-instance
+# internal-server, virtual-host internal-host). They are therefore not served
+# by the public listeners on 80/443 under any Host header. The API calls them
+# through CORE_SERVICE_URL / IAM_SERVICE_URL = http://localhost:8080/core|iam.
+
+embed-server --server-config=standalone.xml --std-out=discard
+
+if (outcome != success) of /interface=internal:read-resource
+    /interface=internal:add(inet-address=127.0.0.1)
+end-if
+
+if (outcome != success) of /socket-binding-group=standard-sockets/socket-binding=internal-http:read-resource
+    /socket-binding-group=standard-sockets/socket-binding=internal-http:add(interface=internal,port=8080)
+end-if
+
+if (outcome != success) of /subsystem=undertow/server=internal-server:read-resource
+    batch
+    /subsystem=undertow/server=internal-server:add(default-host=internal-host)
+    /subsystem=undertow/server=internal-server/host=internal-host:add(alias=["localhost"])
+    /subsystem=undertow/server=internal-server/http-listener=internal:add(socket-binding=internal-http)
+    run-batch
+end-if
+
+stop-embedded-server

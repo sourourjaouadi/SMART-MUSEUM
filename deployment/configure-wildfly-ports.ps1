@@ -4,7 +4,8 @@ param(
 )
 
 # Applies the Smart Museum port layout to standalone.xml with WildFly stopped:
-# public HTTP/HTTPS on 80/443 (wildfly-standard-ports.cli). A timestamped,
+# public HTTP/HTTPS on 80/443 (wildfly-standard-ports.cli) and the internal
+# CORE/IAM server on 127.0.0.1:8080 (wildfly-internal-server.cli). A timestamped,
 # SHA-256-verified backup of standalone.xml is written first; restore it with
 # WildFly stopped to roll back.
 $ErrorActionPreference = 'Stop'
@@ -33,7 +34,7 @@ if ((Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash -ne $hash) {
 # profile environment like start-wildfly.ps1 does, and clear its secrets afterwards.
 try {
     . (Join-Path $PSScriptRoot 'Import-MuseumEnvironment.ps1') -Profile $Profile
-    foreach ($script in @('wildfly-standard-ports.cli')) {
+    foreach ($script in @('wildfly-standard-ports.cli', 'wildfly-internal-server.cli')) {
         & $cli "--file=$(Join-Path $PSScriptRoot $script)"
         if ($LASTEXITCODE -ne 0) { throw "WildFly CLI script failed: $script (exit $LASTEXITCODE). Restore $backup if needed." }
     }
@@ -43,8 +44,12 @@ try {
 }
 
 $xml = [IO.File]::ReadAllText($config)
-foreach ($expected in @('name="http" port="${jboss.http.port:80}"', 'name="https" port="${jboss.https.port:443}"')) {
+foreach ($expected in @(
+        'name="http" port="${jboss.http.port:80}"',
+        'name="https" port="${jboss.https.port:443}"',
+        'name="internal-http" interface="internal" port="8080"',
+        '<server name="internal-server" default-host="internal-host">')) {
     if (!$xml.Contains($expected)) { throw "Expected setting not found after the CLI run: $expected. Restore $backup." }
 }
-Write-Host "WildFly now listens on 80/443 (management unchanged on 9990)."
+Write-Host "WildFly now listens on 80/443; CORE and IAM use internal-server on 127.0.0.1:8080 (management unchanged on 9990)."
 Write-Host "Verified backup: $backup (SHA-256 $hash). To roll back, stop WildFly and copy it over $config."
