@@ -114,7 +114,7 @@ function formatTimestamp(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-export default function AdminApp({ dataSource = defaultDataSource } = {}) {
+export default function AdminApp({ dataSource = defaultDataSource, session = null, onLogout } = {}) {
   const [page, setPage] = useState(() => window.location.hash.slice(1) || 'dashboard');
   const [data, setData] = useState(null);
   const [state, setState] = useState('loading');
@@ -383,15 +383,20 @@ export default function AdminApp({ dataSource = defaultDataSource } = {}) {
     <aside className="admin-sidebar">
       <a className="admin-brand" href="#dashboard"><img src="/icons/museum-mark.svg" alt="" /><span><strong>Smart Museum</strong><small>Administration</small></span></a>
       <nav aria-label="Admin navigation">{NAV.map(([id, label], index) => <a className={page === id ? 'is-active' : ''} aria-current={page === id ? 'page' : undefined} href={`#${id}`} key={id}><span>{String(index + 1).padStart(2, '0')}</span>{label}</a>)}</nav>
-      <div className="admin-sidebar__foot"><span className="admin-demo-dot" /> Mock workspace only</div>
+      <div className="admin-sidebar__foot"><span className="admin-demo-dot" /> {isDemo ? 'Mock workspace only' : 'Connected to the middleware API'}</div>
     </aside>
     <main className="admin-main">
-      <header className="admin-topbar"><div><p>Smart Museum <span>/</span> Admin</p><strong>{TITLES[page] ?? 'Administration'}</strong></div><span className="admin-app-label">Independent mock application</span></header>
+      <header className="admin-topbar"><div><p>Smart Museum <span>/</span> Admin</p><strong>{TITLES[page] ?? 'Administration'}</strong></div><div className="admin-topbar__account">
+        <span className="admin-app-label">{session?.user ? `Signed in as ${session.user.name} (ADMIN)` : 'Independent mock application'}</span>
+        {onLogout && <button type="button" className="admin-button admin-button--quiet" onClick={onLogout}>{session ? 'Sign out' : 'Leave demo'}</button>}
+      </div></header>
       <div className="admin-content">
-        <div className="admin-banner" role="note"><span aria-hidden="true">i</span><div><strong>Simulated admin workspace</strong><p>All records and actions are mock data. Approval decisions change this page’s session state only; nothing is sent to a backend.</p></div></div>
+        {isDemo
+          ? <div className="admin-banner" role="note"><span aria-hidden="true">i</span><div><strong>Simulated admin workspace</strong><p>All records and actions are mock data. Approval decisions change this page’s session state only; nothing is sent to a backend.</p></div></div>
+          : <div className="admin-banner admin-banner--live" role="note"><span aria-hidden="true">i</span><div><strong>Live admin workspace</strong><p>Devices, approvals, zones and locations are read from and saved to the middleware API. Thresholds and the user list are not connected yet.</p></div></div>}
         {notice && <div className="admin-notice" role="status">{notice}<button type="button" aria-label="Dismiss message" onClick={() => setNotice('')}>×</button></div>}
         {renderContent()}
-        <footer className="admin-footer">Smart Museum · Admin prototype <span>Mock data only</span></footer>
+        <footer className="admin-footer">Smart Museum · Admin <span>{isDemo ? 'Mock data only' : 'Live API data'}</span></footer>
       </div>
     </main>
   </div>;
