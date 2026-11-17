@@ -1,0 +1,5 @@
+# Fichiers écrits par Node-RED dans le dossier monté (docker-compose)
+flows_cred.json
+.flows.json.backup
+.flows_cred.json.backup
+*.$$$

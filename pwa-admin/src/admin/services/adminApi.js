@@ -2,7 +2,7 @@ import { clearSession, getAccessToken } from './adminSession.js';
 
 // Admin API client. Same patterns as pwa-client/src/services/api.js: base URL from
 // VITE_API_BASE_URL, request timeout, Bearer token, ApiError, and 401 -> session cleared.
-const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_API_BASE_URL = 'https://api.smartmuseum.test/api';
 const DEFAULT_TIMEOUT_MS = 10_000;
 const SAFE_BACKEND_ERROR_CODE = /^[A-Z0-9_]{1,64}$/;
 const DEVICE_STATUSES = new Set(['pending', 'active', 'rejected', 'offline']);

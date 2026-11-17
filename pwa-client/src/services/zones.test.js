@@ -4,7 +4,7 @@ import { ApiError, createApiClient } from './api.js';
 
 function clientReturning(payload, requests = []) {
   return createApiClient({
-    baseUrl: 'https://api.smartmuseum.test:8443/api',
+    baseUrl: 'https://api.smartmuseum.test/api',
     fetchImpl: async (url, init) => {
       requests.push({ url, method: init.method });
       return {
@@ -26,7 +26,7 @@ test('loads authorized zones with their WGS84 coordinates', async () => {
     { zoneId: 'salle-02', name: 'Manuscript room' },
   ];
   assert.deepEqual(await clientReturning(zones, requests).getZones(), zones);
-  assert.deepEqual(requests, [{ url: 'https://api.smartmuseum.test:8443/api/zones', method: 'GET' }]);
+  assert.deepEqual(requests, [{ url: 'https://api.smartmuseum.test/api/zones', method: 'GET' }]);
 });
 
 test('rejects zone responses with invalid coordinates', async () => {

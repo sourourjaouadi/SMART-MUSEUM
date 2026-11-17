@@ -23,7 +23,7 @@ try {
         . (Join-Path $PSScriptRoot 'Import-MuseumEnvironment.ps1') -Profile $Profile
     }
 
-    foreach ($port in @(8080, 9990)) {
+    foreach ($port in @(80, 443, 8080, 9990)) {
         $listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
         if ($listener) { throw "Port $port already has a listener. Inspect it before starting WildFly." }
     }

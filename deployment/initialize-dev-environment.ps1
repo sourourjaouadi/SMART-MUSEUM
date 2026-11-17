@@ -4,10 +4,21 @@ param(
     [switch]$RotateSecrets,
     [string]$AdminName,
     [string]$AdminEmail,
-    [string]$AdminPassword
+    [string]$AdminPassword,
+    # Also write %LOCALAPPDATA%\SmartMuseum\M2-TLS\acceptance-admin.json for test-m2-runtime.ps1.
+    [switch]$WriteAcceptanceCredentials
 )
 
 $ErrorActionPreference = 'Stop'
+if ($WriteAcceptanceCredentials -and -not ($CreateBootstrapAdmin -or $AdminEmail)) {
+    throw '-WriteAcceptanceCredentials needs the bootstrap admin (-CreateBootstrapAdmin). No file was written.'
+}
+$acceptanceFile = Join-Path $env:LOCALAPPDATA 'SmartMuseum\M2-TLS\acceptance-admin.json'
+if ($WriteAcceptanceCredentials -and (Test-Path -LiteralPath $acceptanceFile) -and -not $RotateSecrets) {
+    throw "$acceptanceFile already exists. Nothing was written. Use set-acceptance-credentials.ps1 -Force to replace it."
+}
+$acceptanceEmail = $null
+$acceptancePassword = $null
 if (-not $OutputPath) {
     $OutputPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'middleware\config\dev.env'
 }
@@ -47,6 +58,10 @@ if ($CreateBootstrapAdmin -or $AdminName -or $AdminEmail -or $AdminPassword) {
         elseif ($_ -like 'BOOTSTRAP_ADMIN_PASSWORD=*') { 'BOOTSTRAP_ADMIN_PASSWORD=' + $password }
         else { $_ }
     })
+    if ($WriteAcceptanceCredentials) {
+        $acceptanceEmail = $email
+        $acceptancePassword = ConvertTo-SecureString $password -AsPlainText -Force
+    }
     $password = $null
 }
 
@@ -68,3 +83,7 @@ try {
     $rng.Dispose()
 }
 Write-Host "$(if(Test-Path -LiteralPath $OutputPath){'Created or rotated'}else{'Created'}) ignored DEV environment file. Secret values were not displayed."
+if ($acceptancePassword) {
+    & (Join-Path $PSScriptRoot 'set-acceptance-credentials.ps1') -Email $acceptanceEmail -Password $acceptancePassword -Force:$RotateSecrets
+    $acceptancePassword = $null
+}

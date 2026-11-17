@@ -14,8 +14,8 @@ Nginx as the public TLS reverse proxy.
 |---|---|---|---|---|
 | Client | `smart-museum-client.war` | `/` | `smartmuseum-host` | `smartmuseum.test` |
 | Admin | `smart-museum-admin.war` | `/` | `admin-smartmuseum-host` | `admin.smartmuseum.test` |
-| CORE service | `middleware/core/target/smart-museum-core.war` | `/core` | `default-host` | internal only |
-| IAM service | `middleware/iam/target/smart-museum-iam.war` | `/iam` | `default-host` | internal only |
+| CORE service | `middleware/core/target/smart-museum-core.war` | `/core` | `internal-host` (server `internal-server`, 127.0.0.1:8080) | internal only |
+| IAM service | `middleware/iam/target/smart-museum-iam.war` | `/iam` | `internal-host` (server `internal-server`, 127.0.0.1:8080) | internal only |
 | Middleware API | `middleware/api/target/smart-museum.war` | `/api` | `api-smartmuseum-host` | `api.smartmuseum.test` |
 
 CORE and IAM endpoints require `X-Internal-Service-Token`; the public reverse
@@ -89,8 +89,9 @@ to `application/manifest+json`. It does not include `src/` or `node_modules/`.
 ## Configure hosts and deploy
 
 First review the WildFly installation, active standalone configuration, and
-management port. The checked local defaults use management port 9990, HTTP
-8080, and HTTPS 8443; your installation can differ.
+management port. After `configure-wildfly-ports.ps1` (below) the local layout
+is: public HTTP 80 (redirect only) and HTTPS 443 on 127.0.0.1, the internal
+CORE/IAM server on 127.0.0.1:8080, and management on 127.0.0.1:9990.
 
 Add these lines manually to the Windows hosts file using an elevated editor;
 the project does not edit it automatically:
@@ -166,9 +167,9 @@ Prepare the isolated DEV environment and local certificate (initialize only
 if `middleware/config/dev.env` does not already exist):
 
 ```powershell
-.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin
+.\deployment\initialize-dev-environment.ps1 -CreateBootstrapAdmin -WriteAcceptanceCredentials
 .\deployment\prepare-local-https.ps1
-$wildflyHome = 'C:\wildfly-41.0.1.Final\wildfly-42.0.0.Final'
+$wildflyHome = 'C:\path\to\wildfly-42.0.0.Final'   # your WildFly 42 installation
 .\deployment\configure-wildfly-https.ps1 -WildFlyHome $wildflyHome
 ```
 
@@ -181,6 +182,74 @@ TLS helper keeps the original application TLS resources and creates a
 timestamped, hash-verified `standalone.xml` backup before a needed change.
 Stop WildFly cleanly before changing this configuration; the helper refuses
 to edit it while management port 9990 is listening.
+
+### Accounts and credentials (each developer)
+
+No account, password, token, or key is shared through Git: `dev.env` is
+ignored, the sandbox database is a local Docker volume, and the acceptance
+credential file lives outside the repository. Every developer creates their
+own:
+
+- `initialize-dev-environment.ps1 -CreateBootstrapAdmin` prompts for **your**
+  sandbox ADMIN name, email, and password (12 to 72 bytes, not echoed) and
+  generates your own random service tokens and JWT key in `dev.env`. On the
+  first WildFly start with that file, IAM creates this ADMIN in your
+  `museum_m2_sandbox`. Sign in to the Admin PWA with it.
+- `-WriteAcceptanceCredentials` also writes
+  `%LOCALAPPDATA%\SmartMuseum\M2-TLS\acceptance-admin.json`
+  (`{"email": ..., "password": ...}`, readable only by your Windows user),
+  which `test-m2-runtime.ps1` needs. If `dev.env` already exists, create or
+  replace that file on its own (with WildFly running, `-VerifyLogin` checks
+  the credentials first):
+
+  ```powershell
+  .\deployment\set-acceptance-credentials.ps1 -VerifyLogin           # prompts for email and password
+  .\deployment\set-acceptance-credentials.ps1 -VerifyLogin -Force    # replace an existing file
+  ```
+
+Changing the DEV admin password: IAM creates the bootstrap ADMIN only when its
+email does not exist yet, and there is no password-change endpoint, so editing
+`BOOTSTRAP_ADMIN_PASSWORD` or rerunning the initializer does **not** change an
+existing account. In the sandbox, either use a new `BOOTSTRAP_ADMIN_EMAIL`, or
+delete the old account (its `_id` is the email in lowercase) and restart
+WildFly with the new values:
+
+```powershell
+docker exec museum-m2-sandbox-mongo mongosh --quiet museum_m2_sandbox --eval "db.users.deleteOne({_id: 'your-admin@example.org'})"
+```
+
+Then update `acceptance-admin.json` with `set-acceptance-credentials.ps1 -Force`.
+`initialize-dev-environment.ps1 -RotateSecrets` regenerates the service tokens
+and JWT key (existing sessions become invalid) and rewrites `dev.env` from the
+template, which also clears `TLS_KEYSTORE_*`; run `prepare-local-https.ps1`
+again afterwards.
+
+### Standard ports (no port in the URLs)
+
+With WildFly stopped, apply the port layout once (no elevated PowerShell is
+needed: Windows has no privileged ports, and the listeners bind 127.0.0.1):
+
+```powershell
+.\deployment\configure-wildfly-ports.ps1 -WildFlyHome $wildflyHome
+```
+
+It runs `wildfly-standard-ports.cli` and `wildfly-internal-server.cli` offline
+(`embed-server`), after a timestamped, SHA-256-verified backup in
+`standalone\configuration\m2-backups\standalone-before-standard-ports-*.xml`:
+
+- public `http` on 80 and `https` on 443; the `https-redirect` filter answers
+  every port-80 request with `302 Location: https://<host><path>` (no port);
+- `internal-server` with one HTTP listener on 127.0.0.1:8080 and
+  `internal-host`. CORE and IAM select it in their `jboss-web.xml`, so they
+  are never served by the public listeners, whatever the `Host` header;
+- management unchanged on 127.0.0.1:9990.
+
+Ports 80 and 443 must be free (no IIS or other http.sys site);
+`start-wildfly.ps1` refuses to start if 80, 443, 8080 or 9990 is in use.
+CORE/IAM WARs from this version need `internal-server`, so configure the ports
+before deploying them. To roll back: stop WildFly, copy the backup over
+`standalone.xml`, restore the previous `CORS_ALLOWED_ORIGINS` in `dev.env`,
+and redeploy the previous WARs (copies are in `standalone\m2-backups`).
 
 Build and start WildFly in its own PowerShell window:
 
@@ -204,22 +273,24 @@ container is `museum-m2-sandbox-mongo` with volume
 
 ## Verify
 
-The public applications use HTTPS port 8443. Confirm HTTP redirects to HTTPS,
-then check the sites at:
+The public applications use HTTPS on the standard port 443, so the URLs have
+no port. Confirm that `http://<host>/` redirects to `https://<host>/` (no port
+in `Location`), then check the sites at:
 
 ```text
-https://smartmuseum.test:8443/
-https://admin.smartmuseum.test:8443/
-https://api.smartmuseum.test:8443/api/health
+https://smartmuseum.test/
+https://admin.smartmuseum.test/
+https://api.smartmuseum.test/api/health
 ```
 
 Check each root, manifest, service worker, one built asset, and an icon. They
 must return the correct app and usable MIME types, including
 `application/manifest+json` for the manifest. The Admin's `#dashboard`
-navigation should survive reload; its actions remain mock-only. The Client
-build uses the public API. The API WAR is not mapped to `default-host`.
-CORE and IAM health checks are internal-only at
-`https://localhost:8443/core/health` and `https://localhost:8443/iam/health`;
+navigation should survive reload; in the API build it requires an ADMIN
+sign-in. Both PWAs use the public API. The API WAR is not mapped to
+`default-host`. CORE and IAM health checks are internal-only (plain HTTP on
+loopback) at
+`http://localhost:8080/core/health` and `http://localhost:8080/iam/health`;
 their business routes must not be exposed on public hosts. All three health
 responses should report service and Mongo as `UP`.
 
@@ -256,8 +327,10 @@ before running:
 .\deployment\test-m2-runtime.ps1 -ConfirmSandboxWrites
 ```
 
-The script uses a protected local acceptance-admin credential file under
-`%LOCALAPPDATA%\SmartMuseum\M2-TLS`; it does not print credential values.
+The script uses your protected local acceptance-admin credential file
+`%LOCALAPPDATA%\SmartMuseum\M2-TLS\acceptance-admin.json`, created with
+`set-acceptance-credentials.ps1` (see "Accounts and credentials" above); it
+does not print credential values.
 It leaves its test records in the sandbox. Recorded runtime results and
 limitations are in `middleware/M2_RUNTIME_ACCEPTANCE.md`.
 

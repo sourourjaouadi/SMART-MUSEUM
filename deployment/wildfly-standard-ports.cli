@@ -1,0 +1,35 @@
+# Public HTTP/HTTPS listeners on the standard ports 80 and 443.
+# Run offline (WildFly stopped) through deployment/configure-wildfly-ports.ps1,
+# which backs up standalone.xml first. Re-running it is harmless.
+#
+# - The listeners stay on the "public" interface (127.0.0.1 in this setup).
+# - Port 80 only redirects: the https-redirect filter below sends every request
+#   to https://<host>/... without a port (redirect-socket="https" stays as a fallback).
+# - Management stays on 127.0.0.1:9990; TLS resources and hosts are unchanged.
+# - jboss.http.port / jboss.https.port can still override the ports at startup.
+
+embed-server --server-config=standalone.xml --std-out=discard
+
+/socket-binding-group=standard-sockets/socket-binding=http:write-attribute(name=port,value="${jboss.http.port:80}")
+/socket-binding-group=standard-sockets/socket-binding=https:write-attribute(name=port,value="${jboss.https.port:443}")
+
+# The servlet CONFIDENTIAL redirect keeps ":443" in Location. This filter answers
+# every request on port 80 first with https://<host><path><query>, no port.
+# %v is the requested host name without port, %U the path, %q the query string.
+if (outcome != success) of /subsystem=undertow/configuration=filter/expression-filter=https-redirect:read-resource
+    /subsystem=undertow/configuration=filter/expression-filter=https-redirect:add(expression="equals(%p, 80) -> redirect('https://%v%U%q')")
+end-if
+if (outcome != success) of /subsystem=undertow/server=default-server/host=default-host/filter-ref=https-redirect:read-resource
+    /subsystem=undertow/server=default-server/host=default-host/filter-ref=https-redirect:add
+end-if
+if (outcome != success) of /subsystem=undertow/server=default-server/host=smartmuseum-host/filter-ref=https-redirect:read-resource
+    /subsystem=undertow/server=default-server/host=smartmuseum-host/filter-ref=https-redirect:add
+end-if
+if (outcome != success) of /subsystem=undertow/server=default-server/host=admin-smartmuseum-host/filter-ref=https-redirect:read-resource
+    /subsystem=undertow/server=default-server/host=admin-smartmuseum-host/filter-ref=https-redirect:add
+end-if
+if (outcome != success) of /subsystem=undertow/server=default-server/host=api-smartmuseum-host/filter-ref=https-redirect:read-resource
+    /subsystem=undertow/server=default-server/host=api-smartmuseum-host/filter-ref=https-redirect:add
+end-if
+
+stop-embedded-server
