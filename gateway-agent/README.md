@@ -15,6 +15,7 @@ BME280 --I2C--> agent.py --MQTT QoS 1--> Mosquitto --> Node-RED --HTTP POST--> b
 |---|---|
 | Topic des mesures | `museum/v1/{zoneId}/{deviceId}/telemetry` (QoS 1) |
 | Topic du statut | `museum/v1/{zoneId}/{deviceId}/status` (QoS 1, retenu) |
+| Topic d'annonce | `museum/v1/{zoneId}/{deviceId}/td` (QoS 1, retenu) : Thing Description W3C WoT (P1.3) |
 | Statut | `{"status":"online",...}` à la connexion ; `{"status":"offline","reason":"lwt"}` publié par le broker si l'agent disparaît ; `reason":"shutdown"` à l'arrêt propre |
 | Identifiants réel | `bme280-01` / `salle-01` / `gw-01` |
 | Identifiants simulé | `sim-bme280-02` / `salle-02` / `gw-sim` |
@@ -75,9 +76,43 @@ sudo systemctl kill -s SIGKILL smart-museum-agent  # test : il redémarre seul a
 
 ## Configuration (A4)
 
-`config.yaml` ne contient **aucun secret** (il est ignoré par Git). L'environnement l'emporte sur le fichier :
-`MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `GATEWAY_ID`, `ZONE_ID`, `DEVICE_ID`,
-`SENSOR_TYPE`, `INTERVAL_SECONDS`, `LOG_LEVEL`. Une configuration invalide arrête l'agent avec le code 2.
+`config.yaml` ne contient **aucun secret** (il est ignoré par Git, comme tout `config.*.yaml`). L'environnement
+l'emporte sur le fichier : `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_TLS_ENABLED`,
+`MQTT_TLS_CA_CERTS`, `ANNOUNCE_TD`, `GATEWAY_ID`, `ZONE_ID`, `DEVICE_ID`, `SENSOR_TYPE`, `INTERVAL_SECONDS`,
+`LOG_LEVEL`. Une configuration invalide arrête l'agent avec le code 2.
+
+## Annonce de la Thing Description (P1.3)
+
+À chaque connexion au broker, l'agent publie (QoS 1, retenu) sur `museum/v1/{zoneId}/{deviceId}/td` :
+
+```json
+{ "deviceId": "sim-bme280-02", "zoneId": "salle-02", "gatewayId": "gw-sim", "type": "bme280",
+  "td": { "@context": ["https://www.w3.org/2022/wot/td/v1.1", {"museum": "urn:museum:"}],
+          "id": "urn:museum:device:sim-bme280-02", "title": "BME280 sim-bme280-02",
+          "securityDefinitions": {"nosec_sc": {"scheme": "nosec"}}, "security": "nosec_sc",
+          "properties": { "temperature": {"unit": "°C", "forms": [{"href": "mqtt://…/telemetry", "op": ["observeproperty"]}]},
+                          "humidity": {"unit": "%", …}, "pressure": {"unit": "hPa", …} },
+          "events": { "status": {"forms": [{"href": "mqtt://…/status", "op": ["subscribeevent"]}]} } } }
+```
+
+Node-RED relaie l'annonce vers `POST /api/things` : un **nouvel** appareil est enregistré en `pending` et ses
+mesures sont refusées (403) jusqu'à l'approbation par un ADMIN ; un appareil connu voit seulement sa TD mise à
+jour. Les unités déclarées sont celles des mesures publiées : le middleware refuse (422) une propriété ou une
+unité absente de la TD. Désactiver l'annonce : `ANNOUNCE_TD=false` ou `mqtt.announce_td: false`.
+
+Démonstration avec un nouvel appareil simulé :
+
+```bash
+cp config.simulated-new.yaml.example config.sim-new.yaml
+PYTHONPATH=src python3 -m gateway_agent --config config.sim-new.yaml   # sim-bme280-03 apparaît en pending
+```
+
+## Broker de production : TLS 8883 (P1.4)
+
+Dans `/etc/smart-museum/agent.env` : `MQTT_HOST=<broker>`, `MQTT_PORT=8883`, `MQTT_TLS_ENABLED=true`,
+`MQTT_TLS_CA_CERTS=/etc/smart-museum/ca.crt`, `MQTT_USERNAME=<deviceId>`, `MQTT_PASSWORD=<mot de passe>`.
+Le certificat du broker est vérifié (nom d'hôte compris). Création des comptes, de la CA et tests de connexion :
+[`../mosquitto/README.md`](../mosquitto/README.md).
 
 ## 2e zone simulée (A8)
 
@@ -105,5 +140,22 @@ passer pour réelle.
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
-python3 -m pytest -q          # 25 tests, sans Raspberry Pi ni broker
+python3 -m pytest -q          # 39 tests, sans Raspberry Pi ni broker
 ```
+
+Ils couvrent la configuration, les messages de mesure, le capteur simulé, le LWT et l'annonce de la Thing
+Description (conformité aux règles du middleware, unités, `forms`, `mqtts://` en TLS, topic `.../td` retenu).
+
+## Chaîne complète en simulation (sans Raspberry Pi)
+
+Depuis la racine du dépôt, avec le middleware démarré :
+
+```bash
+cp .env.example .env && docker compose up -d                 # Mosquitto + Node-RED
+cd gateway-agent && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp config.simulated.yaml.example config.sim.yaml
+PYTHONPATH=src .venv/bin/python -m gateway_agent --config config.sim.yaml
+```
+
+Les mesures de `sim-bme280-02` passent par Mosquitto et Node-RED, sont enregistrées par le middleware avec
+`source = "simulated"` et s'affichent dans la PWA client pour la zone `salle-02`.

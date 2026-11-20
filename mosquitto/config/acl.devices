@@ -1,0 +1,8 @@
+# ACL de l'ecouteur public TLS 8883 : un compte par appareil, nom d'utilisateur = deviceId.
+# %u est remplace par le nom d'utilisateur : un appareil ne peut publier QUE sous son
+# propre deviceId (mesures, statut et LWT, annonce de Thing Description). Aucune lecture.
+# La zone (+) est verifiee par le middleware : un appareil annonce dans une autre zone
+# que la sienne est refuse (403).
+pattern write museum/v1/+/%u/telemetry
+pattern write museum/v1/+/%u/status
+pattern write museum/v1/+/%u/td

@@ -12,3 +12,7 @@ middleware/config/*.properties.local
 
 # Build artifacts
 *.war
+
+# Chaine IoT (P1) : secrets et certificats generes localement
+mosquitto/config/passwd
+mosquitto/certs/

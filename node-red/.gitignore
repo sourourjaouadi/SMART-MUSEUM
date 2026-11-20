@@ -3,3 +3,12 @@ flows_cred.json
 .flows.json.backup
 .flows_cred.json.backup
 *.$$$
+# Fichiers d'execution crees par le conteneur Node-RED dans /data
+.config.*.json
+.config.*.json.backup
+settings.js
+package.json
+package-lock.json
+node_modules/
+lib/
+logs/

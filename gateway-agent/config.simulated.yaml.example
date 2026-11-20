@@ -15,6 +15,7 @@ mqtt:
   keepalive: 30
   qos: 1
   topic_prefix: museum/v1
+  announce_td: true      # annonce de la Thing Description sur .../td (P1.3)
   tls:
     enabled: false
     ca_certs: null

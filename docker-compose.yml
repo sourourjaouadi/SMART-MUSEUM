@@ -1,0 +1,47 @@
+# Chaine IoT de DEVELOPPEMENT (P1) : broker Mosquitto + Node-RED sur le poste local.
+#   cp .env.example .env    # puis renseigner INGEST_SERVICE_TOKEN
+#   docker compose up -d
+# Broker : 127.0.0.1:1883 (sans mot de passe, poste local uniquement).
+# Editeur Node-RED : http://localhost:1880
+# Production (TLS 8883, comptes, ACL) : mosquitto/docker-compose.prod.yml
+name: smart-museum-iot
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: smart-museum-mosquitto
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  nodered:
+    image: nodered/node-red:4.0
+    container_name: smart-museum-nodered
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "127.0.0.1:1880:1880"
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      BACKEND_URL: ${BACKEND_URL:-https://api.smartmuseum.test}
+      INGEST_SERVICE_TOKEN: ${INGEST_SERVICE_TOKEN:?definir INGEST_SERVICE_TOKEN dans .env (meme valeur que le middleware)}
+      INGEST_MAX_ATTEMPTS: ${INGEST_MAX_ATTEMPTS:-30}
+      REJECTED_LOG_FILE: /data/logs/rejected.jsonl
+      # Autorite qui a signe le certificat HTTPS local de l'API (certificat PUBLIC, jamais la cle).
+      NODE_EXTRA_CA_CERTS: /certs/api-ca.pem
+      TZ: UTC
+    extra_hosts:
+      - "api.smartmuseum.test:host-gateway"
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./node-red:/data
+      # API_CA_CERT : racine mkcert creee par deployment/prepare-local-https.ps1 (rootCA.pem), voir .env.example.
+      - ${API_CA_CERT:-./deployment/smartmuseum-dev.crt}:/certs/api-ca.pem:ro
+
+volumes:
+  mosquitto-data:
