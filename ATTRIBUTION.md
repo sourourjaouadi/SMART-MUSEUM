@@ -23,9 +23,6 @@
 | Passerelle : publication MQTT, QoS 1, reconnexion, statut online, LWT | Claude sonnet 5.5 | Rédaction du client MQTT avec reconnexion automatique, publication du statut et message de dernière volonté. Revu et adapté. |
 | Passerelle : service systemd et documentation de l'agent | Claude sonnet 5.5 | Rédaction du fichier de service systemd, des exemples de configuration et du README de l'agent. |
 | Passerelle : simulateur de la deuxième zone | Claude sonnet 5.5 | Génération d'un simulateur de mesures, étiqueté simulated, pour la deuxième zone. |
-| P1 : annonce de la Thing Description (passerelle et relais Node-RED) | Claude Opus 5.5 | Génération de la publication de la TD W3C WoT sur `.../td`, de sa validation dans Node-RED et du relais vers `POST /api/things`, avec les tests. À relire avant la démonstration. |
-| P1 : broker Mosquitto (dev et production TLS 8883, comptes, ACL) et Docker Compose | Claude Opus 5.5 | Génération des configurations Mosquitto, des fichiers Compose, des scripts de certificats et de comptes MQTT, et de leur documentation. |
-| P1 : tests du flux Node-RED et audit IoT | Claude Opus 5.5 | Génération de tests automatiques des nœuds du flux Node-RED et du rapport d'audit `DOCS/P1_IOT_AUDIT.md`. |
 | middleware : temps de réponse constant au login | Claude sonnet 5.5 | Correction de sécurité pour ne pas révéler l'existence d'un email par le temps de réponse. |
 | middleware : architecture et persistance MongoDB | ChatGPT + Codex | Assistance à la structuration du backend Jakarta EE, de la couche Repository et de la persistance MongoDB pour les utilisateurs, appareils, mesures et Thing Descriptions. |
 | Authentification et sécurité | ChatGPT + Codex | Implémentation de l'authentification avec BCrypt, génération et validation de JWT à durée limitée, gestion des rôles ADMIN/CLIENT et contrôle d'accès par zone. |
