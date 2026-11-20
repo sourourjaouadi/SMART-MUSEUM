@@ -63,3 +63,9 @@ def test_simulated_configuration_is_accepted():
         {},
     )
     assert cfg.is_simulated and cfg.zone_id == "salle-02"
+
+
+@pytest.mark.parametrize("name", ["MQTT_TLS_ENABLED", "ANNOUNCE_TD"])
+def test_boolean_settings_reject_unknown_values(name):
+    with pytest.raises(ConfigError):
+        build_config({}, {name: "peut-etre"})

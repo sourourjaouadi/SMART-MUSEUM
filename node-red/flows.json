@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "Smart Museum - ingestion (P1)",
     "disabled": false,
-    "info": "MQTT museum/v1/+/+/telemetry -> validation du schema -> champ source -> POST /api/ingest/measurements.\nJeton: variable d'environnement INGEST_SERVICE_TOKEN (jamais dans ce fichier)."
+    "info": "MQTT museum/v1/+/+/telemetry -> validation du schema -> champ source -> POST /api/ingest/measurements.\nJeton: variable d'environnement INGEST_SERVICE_TOKEN (jamais dans ce fichier).\nP1.3 : MQTT museum/v1/+/+/td -> validation de l'annonce -> POST /api/things (nouvel appareil en pending jusqu'a l'approbation ADMIN)."
   },
   {
     "id": "broker",
@@ -489,6 +489,282 @@
     "wires": [
       [
         "fn-validate"
+      ]
+    ]
+  },
+  {
+    "id": "c6",
+    "type": "comment",
+    "z": "tab-ingestion",
+    "name": "P1.3 : annonces Thing Description (museum/v1/+/+/td) -> validation -> POST /api/things (appareil en pending)",
+    "info": "",
+    "x": 420,
+    "y": 900,
+    "wires": []
+  },
+  {
+    "id": "mqtt-td",
+    "type": "mqtt in",
+    "z": "tab-ingestion",
+    "name": "annonces TD",
+    "topic": "museum/v1/+/+/td",
+    "qos": "1",
+    "datatype": "utf8",
+    "broker": "broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 130,
+    "y": 960,
+    "wires": [
+      [
+        "fn-td-validate"
+      ]
+    ]
+  },
+  {
+    "id": "fn-td-validate",
+    "type": "function",
+    "z": "tab-ingestion",
+    "name": "Valider annonce TD",
+    "func": "// P1.3 : valider l'annonce Thing Description et preparer POST /api/things.\n// Sortie 1 = a envoyer, sortie 2 = rejete (journal). Les regles detaillees de la TD\n// (securityDefinitions, affordances, forms) sont verifiees par le middleware : une seule source de verite.\nconst ID = /^[A-Za-z0-9._-]{1,64}$/;\nconst TD_CONTEXT = 'https://www.w3.org/2022/wot/td/v1.1';\n\nfunction reject(reason, detail) {\n    msg.reason = reason;\n    msg.detail = detail;\n    msg.raw = typeof msg.payload === 'string' ? msg.payload : JSON.stringify(msg.payload);\n    node.status({ fill: 'yellow', shape: 'ring', text: reason });\n    return [null, msg];\n}\n\nconst parts = String(msg.topic || '').split('/');           // museum / v1 / zone / device / td\nlet a;\ntry {\n    a = JSON.parse(msg.payload);\n} catch (e) {\n    return reject('JSON_INVALIDE', e.message);\n}\nif (a === null || typeof a !== 'object' || Array.isArray(a)) return reject('ANNONCE_INVALIDE', \"l'annonce doit etre un objet JSON\");\nfor (const f of ['deviceId', 'zoneId']) {\n    if (typeof a[f] !== 'string' || !ID.test(a[f])) return reject('ANNONCE_INVALIDE', f + ' : 1 a 64 caracteres (lettres, chiffres, . _ -)');\n}\nfor (const f of ['gatewayId', 'type']) {\n    if (a[f] === undefined) continue;\n    if (typeof a[f] !== 'string' || !ID.test(a[f])) return reject('ANNONCE_INVALIDE', f + ' : 1 a 64 caracteres (lettres, chiffres, . _ -)');\n}\nif (parts.length !== 5 || parts[4] !== 'td' || parts[2] !== a.zoneId || parts[3] !== a.deviceId) {\n    return reject('TOPIC_INCOHERENT', 'topic ' + msg.topic + ' <> zoneId/deviceId de l annonce');\n}\nconst td = a.td;\nif (td === null || typeof td !== 'object' || Array.isArray(td)) return reject('TD_INVALIDE', 'td doit etre un objet JSON-LD');\nconst ctx = td['@context'];\nif (!(ctx === TD_CONTEXT || (Array.isArray(ctx) && ctx[0] === TD_CONTEXT))) return reject('TD_INVALIDE', '@context doit etre (ou commencer par) ' + TD_CONTEXT);\nif (typeof td.id !== 'string' || !(td.id.endsWith(':' + a.deviceId) || td.id.endsWith('/' + a.deviceId))) {\n    return reject('TD_INVALIDE', 'id de la TD incoherent avec deviceId ' + a.deviceId);\n}\nif (typeof td.title !== 'string' || td.title.trim() === '') return reject('TD_INVALIDE', 'title obligatoire');\n\nconst token = env.get('INGEST_SERVICE_TOKEN');\nif (!token) {\n    node.error('INGEST_SERVICE_TOKEN absent : annonce non envoyee', msg);\n    return reject('TOKEN_ABSENT', 'variable INGEST_SERVICE_TOKEN non definie dans Node-RED');\n}\nconst base = (env.get('BACKEND_URL') || 'http://localhost:8080').replace(/\\/+$/, '');\n\nmsg.announcement = a;                                        // copie conservee pour les nouveaux essais\nmsg.attempt = 0;\nmsg.method = 'POST';\nmsg.url = base + '/api/things';\nmsg.headers = { 'Content-Type': 'application/json', 'X-Service-Token': token };\nmsg.requestTimeout = 10000;\nmsg.payload = a;\nnode.status({ fill: 'green', shape: 'dot', text: 'TD ' + a.deviceId });\nreturn [msg, null];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 960,
+    "wires": [
+      [
+        "debug-td-clean",
+        "http-things"
+      ],
+      [
+        "fn-reject"
+      ]
+    ]
+  },
+  {
+    "id": "debug-td-clean",
+    "type": "debug",
+    "z": "tab-ingestion",
+    "name": "annonce TD valide",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "announcement",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 610,
+    "y": 920,
+    "wires": []
+  },
+  {
+    "id": "http-things",
+    "type": "http request",
+    "z": "tab-ingestion",
+    "name": "POST /api/things",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 600,
+    "y": 960,
+    "wires": [
+      [
+        "fn-td-route"
+      ]
+    ]
+  },
+  {
+    "id": "catch-td",
+    "type": "catch",
+    "z": "tab-ingestion",
+    "name": "erreur reseau (TD)",
+    "scope": [
+      "http-things"
+    ],
+    "uncaught": false,
+    "x": 590,
+    "y": 1020,
+    "wires": [
+      [
+        "fn-td-network-error"
+      ]
+    ]
+  },
+  {
+    "id": "fn-td-network-error",
+    "type": "function",
+    "z": "tab-ingestion",
+    "name": "Marquer erreur reseau (TD)",
+    "func": "msg.statusCode = 0;\nmsg.networkError = (msg.error && msg.error.message) || 'pas de reponse';\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 830,
+    "y": 1020,
+    "wires": [
+      [
+        "fn-td-route"
+      ]
+    ]
+  },
+  {
+    "id": "fn-td-route",
+    "type": "function",
+    "z": "tab-ingestion",
+    "name": "Aiguiller la reponse (TD)",
+    "func": "// Sorties : 1 = enregistre / mis a jour, 2 = rejet definitif (journal), 3 = a reessayer, 4 = alerte configuration\nconst code = msg.statusCode;\nconst a = msg.announcement || {};\nconst label = a.deviceId || '?';\n\nif (code === 201 || code === 200) {      // 201 : nouvel appareil en attente (pending) ; 200 : TD mise a jour\n    let deviceStatus = '';\n    try { deviceStatus = JSON.parse(msg.payload).deviceStatus || ''; } catch (e) { /* corps non JSON */ }\n    msg.result = (code === 201 ? 'registered' : 'updated') + (deviceStatus ? ' (' + deviceStatus + ')' : '');\n    node.status({ fill: 'green', shape: 'dot', text: code + ' ' + label + ' ' + deviceStatus });\n    return [msg, null, null, null];\n}\nif (code === 400 || code === 403 || code === 422) {   // TD invalide, appareil rejete ou zone differente : ne pas reessayer\n    msg.reason = 'ANNONCE_REJETEE_' + code;\n    msg.detail = String(msg.payload).slice(0, 500);\n    msg.raw = JSON.stringify(a);\n    node.status({ fill: 'yellow', shape: 'ring', text: code + ' ' + label });\n    return [null, msg, null, null];\n}\nif (code === 401) {                       // jeton refuse : erreur de configuration\n    msg.reason = 'JETON_REFUSE_401';\n    msg.detail = 'verifier INGEST_SERVICE_TOKEN (Node-RED) = INGEST_SERVICE_TOKEN (middleware)';\n    msg.raw = JSON.stringify(a);\n    node.status({ fill: 'red', shape: 'dot', text: '401 jeton refuse' });\n    return [null, null, null, msg];\n}\n// 409 (enregistrement concurrent), 5xx, 0 (pas de reponse) : reessayer avec la meme annonce\nmsg.retryReason = code ? ('HTTP ' + code) : ('reseau : ' + (msg.networkError || 'pas de reponse'));\nnode.status({ fill: 'orange', shape: 'ring', text: msg.retryReason });\nreturn [null, null, msg, null];",
+    "outputs": 4,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 840,
+    "y": 960,
+    "wires": [
+      [
+        "debug-td-ok"
+      ],
+      [
+        "fn-reject"
+      ],
+      [
+        "fn-td-retry"
+      ],
+      [
+        "fn-alert"
+      ]
+    ]
+  },
+  {
+    "id": "debug-td-ok",
+    "type": "debug",
+    "z": "tab-ingestion",
+    "name": "appareil enregistre / TD mise a jour",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "result",
+    "targetType": "msg",
+    "statusVal": "result",
+    "statusType": "msg",
+    "x": 1130,
+    "y": 920,
+    "wires": []
+  },
+  {
+    "id": "fn-td-retry",
+    "type": "function",
+    "z": "tab-ingestion",
+    "name": "Nouvel essai (TD)",
+    "func": "const max = parseInt(env.get('INGEST_MAX_ATTEMPTS') || '30', 10);\nmsg.attempt = (msg.attempt || 0) + 1;\nif (msg.attempt > max) {\n    msg.reason = 'ABANDON_ANNONCE_APRES_' + max + '_ESSAIS';\n    msg.detail = msg.retryReason;\n    msg.raw = JSON.stringify(msg.announcement);\n    return [null, msg];\n}\nmsg.delay = Math.min(1000 * Math.pow(2, msg.attempt), 60000);   // 2 s, 4 s ... 60 s\nmsg.payload = msg.announcement;\n// La reponse HTTP a remplace msg.headers : remettre les en-tetes de la requete (jeton compris).\nmsg.headers = { 'Content-Type': 'application/json', 'X-Service-Token': env.get('INGEST_SERVICE_TOKEN') };\ndelete msg.statusCode; delete msg.responseUrl; delete msg.networkError; delete msg.error;\nnode.status({ fill: 'orange', shape: 'ring', text: 'essai ' + msg.attempt + ' dans ' + (msg.delay / 1000) + ' s' });\nreturn [msg, null];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1090,
+    "y": 1000,
+    "wires": [
+      [
+        "delay-td-retry"
+      ],
+      [
+        "fn-reject"
+      ]
+    ]
+  },
+  {
+    "id": "delay-td-retry",
+    "type": "delay",
+    "z": "tab-ingestion",
+    "name": "attente TD (msg.delay)",
+    "pauseType": "delayv",
+    "timeout": "5",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 1100,
+    "y": 1060,
+    "wires": [
+      [
+        "http-things"
+      ]
+    ]
+  },
+  {
+    "id": "c7",
+    "type": "comment",
+    "z": "tab-ingestion",
+    "name": "Test manuel P1.3 : annonce d'un nouvel appareil simule sim-bme280-03 / salle-02",
+    "info": "",
+    "x": 360,
+    "y": 1120,
+    "wires": []
+  },
+  {
+    "id": "inj-td",
+    "type": "inject",
+    "z": "tab-ingestion",
+    "name": "TEST annonce TD",
+    "props": [],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "x": 130,
+    "y": 1180,
+    "wires": [
+      [
+        "fn-gen-td"
+      ]
+    ]
+  },
+  {
+    "id": "fn-gen-td",
+    "type": "function",
+    "z": "tab-ingestion",
+    "name": "Annonce de test (sim-bme280-03)",
+    "func": "// Annonce d'un NOUVEL appareil simule (sim-bme280-03, salle-02) : apparait en pending dans le middleware.\nconst id = 'sim-bme280-03';\nconst zone = 'salle-02';\nconst base = 'mqtt://' + (env.get('MQTT_HOST') || 'localhost') + ':' + (env.get('MQTT_PORT') || '1883') + '/museum/v1/' + zone + '/' + id + '/';\nconst prop = (title, unit, minimum, maximum) => ({\n    title, type: 'number', unit, minimum, maximum, readOnly: true, observable: true,\n    forms: [{ href: base + 'telemetry', op: ['observeproperty'], contentType: 'application/json' }]\n});\nmsg.topic = 'museum/v1/' + zone + '/' + id + '/td';\nmsg.payload = JSON.stringify({\n    deviceId: id, zoneId: zone, gatewayId: 'gw-sim', type: 'bme280',\n    td: {\n        '@context': ['https://www.w3.org/2022/wot/td/v1.1', { museum: 'urn:museum:' }],\n        '@type': 'Thing',\n        id: 'urn:museum:device:' + id,\n        title: 'BME280 ' + id + ' (test)',\n        securityDefinitions: { nosec_sc: { scheme: 'nosec' } },\n        security: 'nosec_sc',\n        properties: {\n            temperature: prop('Temperature', '°C', -40, 85),\n            humidity: prop('Humidite relative', '%', 0, 100),\n            pressure: prop('Pression', 'hPa', 300, 1100)\n        },\n        events: {\n            status: {\n                title: \"Statut de l'appareil (online/offline, LWT)\",\n                data: { type: 'string', enum: ['online', 'offline'] },\n                forms: [{ href: base + 'status', op: ['subscribeevent'], contentType: 'application/json' }]\n            }\n        }\n    }\n});\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 370,
+    "y": 1180,
+    "wires": [
+      [
+        "fn-td-validate"
       ]
     ]
   }

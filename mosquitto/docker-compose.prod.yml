@@ -1,0 +1,45 @@
+# Chaine IoT de PRODUCTION (P1.4) sur la VM cloud : Mosquitto (TLS 8883) + Node-RED.
+# Prerequis (voir mosquitto/README.md) :
+#   mosquitto/certs/{ca.crt,server.crt,server.key}   scripts/generate-certs.sh
+#   mosquitto/config/passwd                          scripts/add-device-user.sh
+#   .env a la racine du depot avec BACKEND_URL et INGEST_SERVICE_TOKEN
+# Lancement depuis la racine du depot :
+#   docker compose -f mosquitto/docker-compose.prod.yml --env-file .env up -d
+name: smart-museum-iot-prod
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: smart-museum-mosquitto
+    restart: unless-stopped
+    ports:
+      - "8883:8883"            # seul port public : MQTT sur TLS (1883 reste interne)
+    volumes:
+      - ./config/mosquitto.prod.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/acl.internal:/mosquitto/config/acl.internal:ro
+      - ./config/acl.devices:/mosquitto/config/acl.devices:ro
+      - ./config/passwd:/mosquitto/config/passwd:ro
+      - ./certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+
+  nodered:
+    image: nodered/node-red:4.0
+    container_name: smart-museum-nodered
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "127.0.0.1:1880:1880"  # editeur : uniquement par tunnel SSH, jamais public
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      BACKEND_URL: ${BACKEND_URL:?definir BACKEND_URL (ex. https://api.smartmuseum.example)}
+      INGEST_SERVICE_TOKEN: ${INGEST_SERVICE_TOKEN:?definir INGEST_SERVICE_TOKEN}
+      INGEST_MAX_ATTEMPTS: ${INGEST_MAX_ATTEMPTS:-30}
+      REJECTED_LOG_FILE: /data/logs/rejected.jsonl
+      TZ: UTC
+    volumes:
+      - ../node-red:/data
+
+volumes:
+  mosquitto-data:

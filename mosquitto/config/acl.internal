@@ -1,0 +1,5 @@
+# ACL de l'ecouteur interne 1883 (reseau Docker uniquement, jamais publie).
+# Les clients anonymes de cet ecouteur (Node-RED) peuvent seulement LIRE les topics du musee.
+topic read museum/v1/+/+/telemetry
+topic read museum/v1/+/+/status
+topic read museum/v1/+/+/td

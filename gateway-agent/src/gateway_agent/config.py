@@ -2,7 +2,7 @@
 Module  : gateway_agent.config
 Auteur  : P1 (passerelle, MQTT, Node-RED)
 Date    : 2026-11-01
-Version : 1.0
+Version : 1.1
 Rôle    : chargement et validation de la configuration (tâche A4).
           Aucun secret dans le fichier : identifiants MQTT uniquement par
           variables d'environnement.
@@ -42,6 +42,7 @@ class MqttConfig:
     username: Optional[str] = None  # jamais lu dans le fichier
     password: Optional[str] = None  # jamais lu dans le fichier
     tls: TlsConfig = field(default_factory=TlsConfig)
+    announce_td: bool = True  # publier la Thing Description sur .../td à chaque connexion
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,17 @@ def _check_id(name: str, value: Any) -> str:
             f"{name} invalide ({value!r}) : 1 à 64 caractères parmi lettres, chiffres, '.', '_' et '-'."
         )
     return value
+
+
+def _bool(name: str, value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "on"):
+        return True
+    if text in ("0", "false", "no", "off"):
+        return False
+    raise ConfigError(f"{name} doit valoir true ou false ({value!r}).")
 
 
 def _is_sim_name(gateway_id: str, device_id: str) -> bool:
@@ -125,6 +137,10 @@ def build_config(raw: Mapping[str, Any], env: Mapping[str, str]) -> Config:
     if not prefix or "+" in prefix or "#" in prefix:
         raise ConfigError("mqtt.topic_prefix invalide (caractères génériques interdits).")
 
+    tls_enabled = _bool("mqtt.tls.enabled", env.get("MQTT_TLS_ENABLED", tl.get("enabled", False)))
+    ca_certs = env.get("MQTT_TLS_CA_CERTS") or tl.get("ca_certs") or None
+    announce_td = _bool("mqtt.announce_td", env.get("ANNOUNCE_TD", mq.get("announce_td", True)))
+
     # Garde-fou d'honnêteté : une mesure simulée ne doit jamais passer pour réelle.
     simulated_type = sensor_type in ("fake", "simulated")
     simulated_name = _is_sim_name(gateway_id, device_id)
@@ -152,7 +168,8 @@ def build_config(raw: Mapping[str, Any], env: Mapping[str, str]) -> Config:
             topic_prefix=prefix,
             username=env.get("MQTT_USERNAME") or None,
             password=env.get("MQTT_PASSWORD") or None,
-            tls=TlsConfig(enabled=bool(tl.get("enabled", False)), ca_certs=tl.get("ca_certs")),
+            tls=TlsConfig(enabled=tls_enabled, ca_certs=ca_certs),
+            announce_td=announce_td,
         ),
         log_level=str(env.get("LOG_LEVEL", lg.get("level", "INFO"))).upper(),
     )

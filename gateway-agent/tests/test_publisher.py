@@ -26,3 +26,19 @@ def test_last_will_is_retained_offline_on_status_topic():
     assert json.loads(will)["status"] == "offline"
     assert pub._client._will_retain is True
     assert pub._client._will_qos == 1
+
+
+def test_announcement_is_published_retained_on_td_topic():
+    from gateway_agent.config import build_config as _build
+
+    cfg = _build({"gateway": {"id": "gw-sim", "zone_id": "salle-02", "device_id": "sim-bme280-02"},
+                  "sensor": {"type": "simulated"}}, {})
+    pub = Publisher(cfg)
+    sent = []
+    pub._client.publish = lambda topic, payload=None, qos=0, retain=False: sent.append((topic, payload, qos, retain))
+    pub.announce()
+    topic, payload, qos, retain = sent[0]
+    assert topic == "museum/v1/salle-02/sim-bme280-02/td"
+    assert (qos, retain) == (1, True)
+    body = json.loads(payload)
+    assert body["deviceId"] == "sim-bme280-02" and body["td"]["id"] == "urn:museum:device:sim-bme280-02"

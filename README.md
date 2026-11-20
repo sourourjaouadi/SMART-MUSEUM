@@ -56,10 +56,10 @@ flowchart TB
     end
 
     SENSOR -->|"I2C"| AGENT
-    AGENT -->|"MQTT PUBLISH, QoS 1<br/>museum/v1/{zone}/{device}/telemetry<br/>and /status (retained, LWT)"| BROKER
-    BROKER -->|"subscriptions<br/>.../telemetry and .../status"| NODERED
+    AGENT -->|"MQTT PUBLISH, QoS 1<br/>museum/v1/{zone}/{device}/telemetry,<br/>/status (retained, LWT), /td (retained)"| BROKER
+    BROKER -->|"subscriptions<br/>.../telemetry, .../status, .../td"| NODERED
     NODERED -->|"HTTP POST /api/ingest/measurements<br/>X-Service-Token"| API
-    NODERED -.->|"planned: POST /api/things<br/>(Thing Description announcement)"| API
+    NODERED -->|"HTTP POST /api/things<br/>(Thing Description announcement)"| API
 
     CLIENT <-->|"REST + Bearer JWT"| API
     ADMIN <-->|"REST + Bearer JWT (ADMIN)"| API
@@ -76,7 +76,6 @@ flowchart TB
 |---|---|
 | Solid arrow `A → B` | Data flows from A to B; A initiates the exchange. Implemented in this repository. |
 | Double arrow `A ↔ B` | Request/response: A sends the request, B returns the response. |
-| Dashed arrow | Supported by the receiving side but not yet connected (see section 10). |
 | Box inside *Middleware* | An independently deployable WAR. API-to-service calls use internal HTTP and a shared service token. |
 
 Notes on the diagram:
@@ -97,7 +96,7 @@ Notes on the diagram:
 
 ### Production cloud target (not yet implemented)
 
-The architecture document defines the following production cloud target. Local WildFly HTTPS for development is implemented, but the production Nginx, certificate and broker configuration is not present in this repository.
+The architecture document defines the following production cloud target. Local WildFly HTTPS for development is implemented, but the production Nginx and certificate configuration is not present in this repository. The production broker configuration (TLS 8883, accounts, ACL) is in [`mosquitto/`](mosquitto/README.md).
 
 ```mermaid
 flowchart LR
@@ -167,7 +166,7 @@ Details: [`gateway-agent/README.md`](gateway-agent/README.md).
 |---|---|---|
 | `museum/v1/{zoneId}/{deviceId}/telemetry` | 1 | One measurement (JSON) |
 | `museum/v1/{zoneId}/{deviceId}/status` | 1, retained | `online` / `offline` |
-| `museum/v1/{zoneId}/{deviceId}/td` | 1 | Planned: Thing Description announcement of a new device |
+| `museum/v1/{zoneId}/{deviceId}/td` | 1, retained | Thing Description announcement `{deviceId, zoneId, gatewayId, type, td}`, relayed to `POST /api/things` |
 
 The Node-RED flow is versioned in [`node-red/flows.json`](node-red/flows.json) (one tab, "Smart Museum - ingestion (P1)"):
 
@@ -180,7 +179,9 @@ The Node-RED flow is versioned in [`node-red/flows.json`](node-red/flows.json) (
 
 - **Rejection log:** one JSON line per rejected message in `REJECTED_LOG_FILE` (default `/data/logs/rejected.jsonl`).
 - **Environment variables:** `MQTT_HOST`, `MQTT_PORT`, `BACKEND_URL`, `INGEST_SERVICE_TOKEN`, `INGEST_MAX_ATTEMPTS` (30 by default), `REJECTED_LOG_FILE`. The flow file contains no secret.
-- **Manual tests:** the `TEST mesure valide` and `TEST JSON casse` buttons only use the simulated device `sim-bme280-02`, never the real sensor.
+- **Thing Description announcements (P1.3):** the gateway publishes its W3C WoT Thing Description on `.../td` at each connection; Node-RED validates it and forwards it to `POST /api/things`. A new device is registered as `pending` until an ADMIN approves it; `201`/`200` are successes, `400`/`403`/`422` are logged, `409`/`5xx` are retried.
+- **Manual tests:** the `TEST mesure valide`, `TEST JSON casse` and `TEST annonce TD` buttons only use simulated devices (`sim-bme280-02`, new device `sim-bme280-03`), never the real sensor.
+- **Local run:** `cp .env.example .env` then `docker compose up -d` at the repository root starts Mosquitto (`127.0.0.1:1883`) and Node-RED (`http://localhost:1880`). Production broker (TLS 8883, one account per device, ACL): [`mosquitto/README.md`](mosquitto/README.md).
 
 Details: [`node-red/README.md`](node-red/README.md).
 
@@ -255,7 +256,9 @@ Details: [`DOCS/pwa-client.md`](DOCS/pwa-client.md) and [`DOCS/ADMIN_PWA.md`](DO
 ```text
 SMART-MUSEUM/
 |-- gateway-agent/              Raspberry Pi Python sensor agent, systemd service, tests
-|-- node-red/                   Node-RED ingestion flow (flows.json)
+|-- node-red/                   Node-RED flow (flows.json) and its automated tests (test/)
+|-- mosquitto/                  MQTT broker: dev and production (TLS 8883, accounts, ACL) configuration, scripts
+|-- docker-compose.yml          local Mosquitto + Node-RED (variables in .env.example)
 |-- middleware/
 |   |-- pom.xml                 Maven parent aggregator
 |   |-- contracts/              shared DTO/error JAR
@@ -423,7 +426,8 @@ The development server uses mock mode by default. Set `VITE_DATA_MODE=api` only 
 ### Gateway and Node-RED
 
 - Raspberry Pi installation, wiring and systemd service: [`gateway-agent/README.md`](gateway-agent/README.md).
-- Node-RED: import `node-red/flows.json` into a Node-RED instance and provide the environment variables listed in section 4.2. The Compose file for Mosquitto and Node-RED is not versioned in this repository.
+- Mosquitto and Node-RED: `cp .env.example .env`, set `INGEST_SERVICE_TOKEN` and `BACKEND_URL`, then `docker compose up -d` at the repository root; see [`node-red/README.md`](node-red/README.md).
+- Full chain without hardware: run the simulated gateway (`gateway-agent/config.simulated.yaml.example`); a new simulated device for the discovery demonstration is in `config.simulated-new.yaml.example`.
 
 ---
 
@@ -434,7 +438,8 @@ The development server uses mock mode by default. Set `VITE_DATA_MODE=api` only 
 | Middleware | `mvn -f middleware/pom.xml clean verify` | 67 JUnit 5 tests (CORE 48, IAM 9, API 10) |
 | Client PWA | `cd pwa-client && npm test` | 46 Node.js tests + 12 Vitest component tests |
 | Admin PWA | `cd pwa-admin && npm test` | 16 Node.js tests + 43 Vitest component tests |
-| Gateway agent | `cd gateway-agent && python3 -m pytest -q` | 25 pytest tests; no Raspberry Pi or broker needed |
+| Gateway agent | `cd gateway-agent && python3 -m pytest -q` | 39 pytest tests; no Raspberry Pi or broker needed |
+| Node-RED flow | `node --test node-red/test/flows.test.mjs` | 31 Node.js tests: flow structure, no secrets, validation, routing, retries, Thing Description relay |
 | Full build | `.\deployment\build-all.ps1` | Runs the PWA and middleware tests, then packages the five WARs |
 | Runtime integration | `.\deployment\test-m2-runtime.ps1 -ConfirmSandboxWrites` | Authentication, roles and zones, CORS, service tokens, Things, measurements, health and deployments |
 
@@ -467,8 +472,9 @@ A healthy middleware does not prove that the physical IoT chain works: the gatew
 
 ### Implemented
 
-- Gateway agent: BME280 reading, MQTT QoS 1 publishing, status and LWT, reconnection, simulated second zone, systemd service, unit tests.
-- Node-RED flow: message validation, `source` labelling, forwarding with the service token, retries with idempotency, rejection log, status subscription.
+- Gateway agent: BME280 reading, MQTT QoS 1 publishing, status and LWT, reconnection, simulated second zone, Thing Description announcement, MQTT over TLS settings, systemd service, unit tests.
+- Node-RED flow: message validation, `source` labelling, forwarding with the service token, retries with idempotency, rejection log, status subscription, Thing Description relay to `POST /api/things`, automated tests.
+- Local Mosquitto + Node-RED with Docker Compose; production broker configuration (TLS 8883, one account per device, ACL) with certificate and account scripts. P1 audit: [`DOCS/P1_IOT_AUDIT.md`](DOCS/P1_IOT_AUDIT.md).
 - Middleware deployed as separate `smart-museum-core.war`, `smart-museum-iam.war` and `smart-museum.war` applications, with API-to-service HTTP protected by an internal service token.
 - Measurement ingestion with the six-step validation chain and idempotency.
 - Persistence with Jakarta NoSQL entities and Jakarta Data repositories on MongoDB.
@@ -482,17 +488,15 @@ A healthy middleware does not prove that the physical IoT chain works: the gatew
 
 ### Not yet connected
 
-- The gateway does not yet publish Thing Description announcements on `.../td`, and Node-RED does not relay them; the middleware endpoint `POST /api/things` is ready.
 - The device status published on MQTT is not yet consumed by the middleware.
 - The Admin PWA user list and threshold management have no middleware endpoint yet.
 - Alerts are not implemented (placeholder panel in the client PWA).
-- Production cloud deployment (Nginx, production certificates, MQTT over TLS) remains planned.
+- Production cloud deployment (VM, Nginx, production certificates) remains planned; the MQTT over TLS broker configuration is ready in `mosquitto/` and must be started on the VM.
 
 ---
 
 ## 11. Future Improvements
 
-- Publish Thing Descriptions from the gateway and relay them through Node-RED.
 - Add user-list and threshold endpoints and connect the corresponding Admin pages.
 - Alerts and notifications to museum staff when a threshold is exceeded.
 - Real-time updates to the PWAs (WebSocket).

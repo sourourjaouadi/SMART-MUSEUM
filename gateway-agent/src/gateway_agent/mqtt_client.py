@@ -2,9 +2,10 @@
 Module  : gateway_agent.mqtt_client
 Auteur  : P1 (passerelle, MQTT, Node-RED)
 Date    : 2026-11-01
-Version : 1.0
-Rôle    : publication MQTT QoS 1 avec reconnexion automatique (tâche A2) et
-          statut online / message LWT offline retenu (tâche A3).
+Version : 1.1
+Rôle    : publication MQTT QoS 1 avec reconnexion automatique (tâche A2),
+          statut online / message LWT offline retenu (tâche A3) et annonce de la
+          Thing Description à chaque connexion (tâche P1.3).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import paho.mqtt.client as mqtt
 
 from .config import Config
 from .measurement import utc_now_iso
+from .thing import build_announcement
 
 log = logging.getLogger("gateway_agent.mqtt")
 
@@ -41,6 +43,7 @@ class Publisher:
         self.cfg = cfg
         self.status_topic = cfg.topic("status")
         self.telemetry_topic = cfg.topic("telemetry")
+        self.td_topic = cfg.topic("td")
         self._connected = threading.Event()
         client_id = f"{cfg.gateway_id}-{cfg.device_id}"
         self._client = mqtt.Client(
@@ -67,7 +70,7 @@ class Publisher:
 
     # -- callbacks -------------------------------------------------------
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
-        if reason_code == 0 or getattr(reason_code, "is_failure", False) is False:
+        if not reason_code.is_failure:
             log.info("connecté à %s:%s", self.cfg.mqtt.host, self.cfg.mqtt.port)
             self._connected.set()
             # A3 : statut « online » retenu à chaque (re)connexion.
@@ -77,6 +80,8 @@ class Publisher:
                 qos=1,
                 retain=True,
             )
+            if self.cfg.mqtt.announce_td:
+                self.announce()
         else:
             log.error("connexion MQTT refusée : %s", reason_code)
 
@@ -92,6 +97,20 @@ class Publisher:
     @property
     def connected(self) -> bool:
         return self._connected.is_set()
+
+    def announce(self) -> mqtt.MQTTMessageInfo:
+        """P1.3 : annonce retenue de la Thing Description (relayée par Node-RED vers POST /api/things).
+
+        Retenue : Node-RED la reçoit aussi après un redémarrage ; une nouvelle annonce d'un
+        appareil connu met seulement sa TD à jour côté middleware (pas de doublon).
+        """
+        log.info("annonce de la Thing Description sur %s", self.td_topic)
+        return self._client.publish(
+            self.td_topic,
+            json.dumps(build_announcement(self.cfg), separators=(",", ":"), ensure_ascii=False),
+            qos=1,
+            retain=True,
+        )
 
     def publish_measurement(self, message: dict) -> mqtt.MQTTMessageInfo:
         return self._client.publish(
