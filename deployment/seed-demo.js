@@ -85,7 +85,48 @@ for (let i = 0; i < docs.length; i += 2000) {
   inserted += result.insertedIds ? Object.keys(result.insertedIds).length : 0;
 }
 
+// Pending device in salle-02 so the ADMIN approval workflow can be demonstrated.
+dbx.devices.deleteOne({ _id: 'demo-pending-01' });
+dbx.things.deleteOne({ _id: 'demo-pending-01' });
+const td = {
+  '@context': ['https://www.w3.org/2022/wot/td/v1.1', { museum: 'urn:museum:' }],
+  '@type': 'Thing',
+  id: 'urn:museum:device:demo-pending-01',
+  title: 'BME280 demo-pending-01',
+  description: 'Capteur environnemental en attente de validation',
+  securityDefinitions: { nosec_sc: { scheme: 'nosec' } },
+  security: 'nosec_sc',
+  properties: {
+    temperature: { title: 'Temperature', type: 'number', unit: '\u00B0C', minimum: -40, maximum: 85, readOnly: true, observable: true, forms: [{ href: 'mqtt://localhost:1883/museum/v1/salle-02/demo-pending-01/telemetry', op: ['observeproperty'], contentType: 'application/json' }] },
+    humidity: { title: 'Humidite', type: 'number', unit: '%', minimum: 0, maximum: 100, readOnly: true, observable: true, forms: [{ href: 'mqtt://localhost:1883/museum/v1/salle-02/demo-pending-01/telemetry', op: ['observeproperty'], contentType: 'application/json' }] },
+    pressure: { title: 'Pression', type: 'number', unit: 'hPa', minimum: 300, maximum: 1100, readOnly: true, observable: true, forms: [{ href: 'mqtt://localhost:1883/museum/v1/salle-02/demo-pending-01/telemetry', op: ['observeproperty'], contentType: 'application/json' }] },
+  },
+};
+const nowDate = new Date();
+dbx.devices.insertOne({
+  _id: 'demo-pending-01',
+  type: 'bme280',
+  zoneId: 'salle-02',
+  gatewayId: 'gw-sim',
+  status: 'pending',
+  thingId: 'urn:museum:device:demo-pending-01',
+  lastSeenAt: null,
+  latitude: null,
+  longitude: null,
+  floor: null,
+});
+dbx.things.insertOne({
+  _id: 'demo-pending-01',
+  thingId: 'urn:museum:device:demo-pending-01',
+  td: JSON.stringify(td),
+  properties: ['temperature', 'humidity', 'pressure'],
+  units: { temperature: '\u00B0C', humidity: '%', pressure: 'hPa' },
+  registeredAt: nowDate,
+  updatedAt: nowDate,
+});
+
 print('inserted measurements=' + inserted);
+print('pending device demo-pending-01 ready (salle-02)');
 print('final counts: devices=' + dbx.devices.countDocuments() +
   ' things=' + dbx.things.countDocuments() +
   ' measurements=' + dbx.measurements.countDocuments() +
