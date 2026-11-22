@@ -5,7 +5,9 @@
 # CORE and IAM select this server in their jboss-web.xml (server-instance
 # internal-server, virtual-host internal-host). They are therefore not served
 # by the public listeners on 80/443 under any Host header. The API calls them
-# through CORE_SERVICE_URL / IAM_SERVICE_URL = http://localhost:8080/core|iam.
+# through CORE_SERVICE_URL / IAM_SERVICE_URL = http://localhost:8080/core|iam
+# or https://localhost:8443/core|iam (production HTTPS).
+#
 
 embed-server --server-config=standalone.xml --std-out=discard
 
@@ -17,11 +19,16 @@ if (outcome != success) of /socket-binding-group=standard-sockets/socket-binding
     /socket-binding-group=standard-sockets/socket-binding=internal-http:add(interface=internal,port=8080)
 end-if
 
+if (outcome != success) of /socket-binding-group=standard-sockets/socket-binding=internal-https:read-resource
+    /socket-binding-group=standard-sockets/socket-binding=internal-https:add(interface=internal,port=8443)
+end-if
+
 if (outcome != success) of /subsystem=undertow/server=internal-server:read-resource
     batch
     /subsystem=undertow/server=internal-server:add(default-host=internal-host)
     /subsystem=undertow/server=internal-server/host=internal-host:add(alias=["localhost"])
     /subsystem=undertow/server=internal-server/http-listener=internal:add(socket-binding=internal-http)
+    /subsystem=undertow/server=internal-server/https-listener=internal-https:add(socket-binding=internal-https)
     run-batch
 end-if
 

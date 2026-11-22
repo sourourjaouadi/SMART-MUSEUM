@@ -5,12 +5,12 @@ info:
   description: |
     Contrat v1.2. Un doublon de measurementId renvoie 200 (idempotence), pas 409.
     v1.2 : Thing Descriptions W3C WoT 1.1 (JSON-LD 1.1) et decouverte pending -> active.
-    Authentification humaine par JWT Bearer. Les rôles et zones autorisés sont
-    relus dans le compte MongoDB à chaque requête protégée. Les jetons de service
-    restent réservés aux intégrations serveur. Le serveur exige
-    JWT_SIGNING_KEY_BASE64 (au moins 32 aléatoires octets avant encodage Base64),
-    accepte une durée configurée entre 60 et 3600 secondes (900 par défaut), et
-    valide l'issuer configuré par JWT_ISSUER (smart-museum par défaut).
+    Authentification humaine par JWT Bearer. Les roles et zones autorises sont
+    relus dans le compte MongoDB à chaque requete protegee. Les jetons de service
+    restent reserves aux integrations serveur. Le serveur exige
+    JWT_SIGNING_KEY_BASE64 (au moins 32 aleatoires octets avant encodage Base64),
+    accepte une duree configuree entre 60 et 3600 secondes (900 par defaut), et
+    valide l'issuer configure par JWT_ISSUER (smart-museum par defaut).
 servers:
   - url: https://api.smartmuseum.test
 paths:
@@ -24,7 +24,7 @@ paths:
             schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200':
-          description: Jeton d'accès de courte durée
+          description: Jeton d'acces de courte duree
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
@@ -32,7 +32,7 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
   /api/users:
     post:
-      summary: ADMIN - créer un compte CLIENT avec ses zones autorisées
+      summary: ADMIN - creer un compte CLIENT avec ses zones autorisees
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -428,7 +428,7 @@ components:
         thingId: { type: string, example: 'urn:museum:device:bme280-01' }
         location:
           allOf: [{ $ref: '#/components/schemas/Location' }]
-          description: Optionnel - localisation effective (propre a l'appareil, sinon celle de sa zone)
+          description: Optionnel - localisation efficace (propre a l'appareil, sinon celle de sa zone)
         locationSource:
           type: string
           enum: [device, zone]
@@ -473,14 +473,14 @@ components:
     ThingDescription:
       description: W3C WoT Thing Description 1.1 (JSON-LD 1.1). L'id doit se terminer par ":{deviceId}".
       type: object
-      required: ['@context', id, title, securityDefinitions, security]
+      required: ['@context', 'id', 'title', 'securityDefinitions', 'security']
       additionalProperties: true
       properties:
         '@context':
           description: https://www.w3.org/2022/wot/td/v1.1, ou un tableau qui commence par cette URI
-          oneOf:
-            - { type: string }
-            - { type: array, items: {} }
+        oneOf:
+          - { type: string }
+          - { type: array, items: {} }
         '@type': { type: string }
         id: { type: string, format: uri, example: 'urn:museum:device:bme280-01' }
         title: { type: string }

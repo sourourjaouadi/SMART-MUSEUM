@@ -1,18 +1,107 @@
-name: middleware-ci
+name: Smart Museum CI
+
 on:
   push:
-    paths: ["middleware/**", ".github/workflows/middleware-ci.yml"]
-  pull_request:
-    paths: ["middleware/**"]
+    branches:
+      - main
+      - develop
+    pull_request:
+    paths:
+      - middleware/**
+      - deployment/build-linux.sh
+      - deployment/deploy-linux.sh
+      - deployment/health-linux.sh
+      - deployment/LINUX-DEPLOYMENT-GUIDE.md
+
 jobs:
-  build:
+  build-and-validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      # ---- Checkout ----
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- Set up Java 21 ----
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - name: Build et tests
-        run: mvn -B -f middleware/pom.xml verify
+
+      # ---- Set up Maven cache ----
+      - name: Restore Maven cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('middleware/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven
+
+      # ---- Build all WAR artifacts ----
+      - name: Build Linux WARs
+        run: |
+          chmod +x deployment/build-linux.sh
+          ./deployment/build-linux.sh
+          echo "---BUILD_STATUS---$?"
+
+      # ---- Verify all five WAR artifacts exist and are non-empty ----
+      - name: Verify WAR artifacts
+        run: |
+          WAR_FILES=(
+            "middleware/api/target/smart-museum.war"
+            "middleware/core/target/smart-museum-core.war"
+            "middleware/iam/target/smart-museum-iam.war"
+            "pwa-client/deployment/target/smart-museum-client.war"
+            "pwa-admin/deployment/target/smart-museum-admin.war"
+          )
+          ALL_OK=true
+          for war in "${WAR_FILES[@]}"; do
+            if [ ! -s "$war" ]; then
+              echo "FAIL: WAR artifact is missing or empty: $war"
+              ALL_OK=false
+            else
+              SIZE=$(wc -c < "$war")
+              echo "OK: $war ($SIZE bytes)"
+            fi
+          done
+          if [ "$ALL_OK" = "false" ]; then
+            exit 1
+          fi
+          echo "---WAR_VERIFY---OK"
+
+      # ---- Run Maven tests and verification ----
+      - name: Run Maven verify
+        run: |
+          mvn -B -f middleware/pom.xml verify
+
+      # ---- Retain WAR artifacts as CI workflow artifacts ----
+      - name: Upload WAR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-museum-wars-${{ github.run_id }}
+          path: |
+            middleware/api/target/smart-museum.war
+            middleware/core/target/smart-museum-core.war
+            middleware/iam/target/smart-museum-iam.war
+            pwa-client/deployment/target/smart-museum-client.war
+            pwa-admin/deployment/target/smart-museum-admin.war
+          retention-days: 7
+
+      # ---- Summary ----
+      - name: CI Summary
+        run: |
+          echo "=== CI Summary ==="
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Java: ${{ java.version }}"
+          echo "Maven: ${{ env.MAVEN_VERSION }}"
+          echo "WAR artifacts uploaded: 5"
+          echo "---"

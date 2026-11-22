@@ -4,5 +4,5 @@ if (outcome == success) of /subsystem=undertow/server=default-server/host=api-sm
     echo API host already exists; current aliases follow. No changes made.
     /subsystem=undertow/server=default-server/host=api-smartmuseum-host:read-attribute(name=alias)
 else
-    /subsystem=undertow/server=default-server/host=api-smartmuseum-host:add(alias=["api.smartmuseum.test"])
+    /subsystem=undertow/server=default-server/host=api-smartmuseum-host:add(alias=["api.smartmuseum.test", "api.example.invalid"])
 end-if

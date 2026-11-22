@@ -9,12 +9,12 @@ if (outcome == success) of /subsystem=undertow/server=default-server/host=smartm
     echo Client host already exists; current aliases follow. No changes made.
     /subsystem=undertow/server=default-server/host=smartmuseum-host:read-attribute(name=alias)
 else
-    /subsystem=undertow/server=default-server/host=smartmuseum-host:add(alias=["smartmuseum.test"])
+    /subsystem=undertow/server=default-server/host=smartmuseum-host:add(alias=["smartmuseum.test", "client.example.invalid"])
 end-if
 
 if (outcome == success) of /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:read-resource
     echo Admin host already exists; current aliases follow. No changes made.
     /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:read-attribute(name=alias)
 else
-    /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:add(alias=["admin.smartmuseum.test"])
+    /subsystem=undertow/server=default-server/host=admin-smartmuseum-host:add(alias=["admin.smartmuseum.test", "admin.example.invalid"])
 end-if
