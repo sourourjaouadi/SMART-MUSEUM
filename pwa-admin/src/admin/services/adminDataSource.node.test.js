@@ -42,7 +42,7 @@ test('API snapshot lists zones and adds device zones without a record yet', asyn
   const snapshot = await createApiDataSource(api).loadSnapshot();
   assert.deepEqual(snapshot.zones.map((z) => [z.zoneId, Boolean(z.unregistered)]), [['salle-01', false], ['salle-09', true]]);
   assert.deepEqual(snapshot.users, []);
-  assert.ok(snapshot.thresholds.length > 0);
+  assert.deepEqual(snapshot.thresholds, []);
   assert.deepEqual(mergeZones([zone], []), [zone]);
 });
 

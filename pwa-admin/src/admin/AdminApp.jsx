@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createMockDataSource } from './services/adminDataSource.js';
+import ThingDescription from './ThingDescription.jsx';
 import './admin.css';
 
-const defaultDataSource = createMockDataSource();
+// Mock data exists only in mock builds (Vite inlines VITE_DATA_MODE).
+const defaultDataSource = import.meta.env.VITE_DATA_MODE === 'api' ? undefined : createMockDataSource();
 
 const NAV = [
   ['dashboard', 'Overview'],
@@ -13,6 +15,8 @@ const NAV = [
   ['users', 'Users'],
 ];
 const TITLES = Object.fromEntries(NAV);
+// No thresholds endpoint exists, so the page is not offered with live data.
+const API_NAV = NAV.filter(([id]) => id !== 'thresholds');
 const STATUS_FILTERS = ['active', 'pending', 'offline', 'maintenance', 'rejected'];
 // Device statuses defined by the middleware contract (no mock-only "maintenance").
 const API_STATUS_FILTERS = ['active', 'pending', 'offline', 'rejected'];
@@ -362,7 +366,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
             <a className="admin-text-link" href="#approvals">View approvals →</a>
           </div>
           {pending.length ? pending.map((device) => (
-            <ApprovalRow key={device.deviceId} device={device} processingId={processingId} onDecision={decide} />
+            <ApprovalRow key={device.deviceId} device={device} processingId={processingId} onDecision={decide} simulated={isDemo} />
           )) : <div className="admin-empty"><strong>No pending devices</strong><span>{isDemo ? 'New demo devices will appear here.' : 'Devices announced through discovery will appear here.'}</span></div>}
           {actionError && <p className="admin-inline-error" role="alert">{actionError}</p>}
         </section>
@@ -401,7 +405,10 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
           <button type="button" className="admin-button admin-button--quiet" onClick={resetDeviceFilters} disabled={!query && statusFilter === 'all' && zoneFilter === 'all'}>Reset filters</button>
         </div>
         {isApprovals ? rows.length ? rows.map((device) => (
-          <ApprovalRow key={device.deviceId} device={device} processingId={processingId} onDecision={decide} />
+          <div key={device.deviceId}>
+            <ApprovalRow device={device} processingId={processingId} onDecision={decide} simulated={isDemo} />
+            {dataSource.getThingDescription && <ThingDescription deviceId={device.deviceId} load={dataSource.getThingDescription} />}
+          </div>
         )) : <div className="admin-empty"><strong>No pending approvals match these filters</strong><span>{isDemo ? 'Reset filters or wait for another demo device.' : 'Reset filters or wait for another discovered device.'}</span></div> : (
           <>
             <AdminTable columns={isDemo ? inventoryColumns : apiInventoryColumns} rows={inventoryRows} caption="Device inventory" empty="No matching devices" emptyHint="Change or reset the search and filters." />
@@ -434,6 +441,11 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
                   onClear={ownLocation(selected) ? () => saveLocation('device', selected.deviceId, null) : undefined}
                   clearLabel="Use zone location"
                 />
+                {dataSource.getThingDescription && <ThingDescription
+                  key={`td-${selected.deviceId}`}
+                  deviceId={selected.deviceId}
+                  load={dataSource.getThingDescription}
+                />}
               </section>;
             })()}
           </>
@@ -470,7 +482,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
         {actionError && <p className="admin-inline-error" role="alert">{actionError}</p>}
       </section>;
     }
-    if (page === 'thresholds') {
+    if (page === 'thresholds' && isDemo) {
       return <section className="admin-panel"><div className="admin-panel__heading"><div><p className="admin-eyebrow">Conservation limits</p><h2>Threshold management</h2></div><NotConnected /></div><p className="admin-copy">These illustrative limits are read-only and are not connected to alerts or measurement evaluation. The middleware has no thresholds endpoint yet.</p><AdminTable columns={thresholdColumns} rows={data.thresholds} caption="Illustrative environmental thresholds" empty="No thresholds configured" emptyHint="No threshold records are present in the mock data." /></section>;
     }
     if (page === 'users') {
@@ -500,7 +512,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
   return <div className="admin-shell">
     <aside className="admin-sidebar">
       <a className="admin-brand" href="#dashboard"><img src="/icons/museum-mark.svg" alt="" /><span><strong>Smart Museum</strong><small>Administration</small></span></a>
-      <nav aria-label="Admin navigation">{NAV.map(([id, label], index) => <a className={page === id ? 'is-active' : ''} aria-current={page === id ? 'page' : undefined} href={`#${id}`} key={id}><span>{String(index + 1).padStart(2, '0')}</span>{label}</a>)}</nav>
+      <nav aria-label="Admin navigation">{(isDemo ? NAV : API_NAV).map(([id, label], index) => <a className={page === id ? 'is-active' : ''} aria-current={page === id ? 'page' : undefined} href={`#${id}`} key={id}><span>{String(index + 1).padStart(2, '0')}</span>{label}</a>)}</nav>
       <div className="admin-sidebar__foot"><span className="admin-demo-dot" /> {isDemo ? 'Mock workspace only' : 'Connected to the middleware API'}</div>
     </aside>
     <main className="admin-main">
@@ -511,7 +523,7 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
       <div className="admin-content">
         {isDemo
           ? <div className="admin-banner" role="note"><span aria-hidden="true">i</span><div><strong>Simulated admin workspace</strong><p>All records and actions are mock data. Approval decisions change this page’s session state only; nothing is sent to a backend.</p></div></div>
-          : <div className="admin-banner admin-banner--live" role="note"><span aria-hidden="true">i</span><div><strong>Live admin workspace</strong><p>Devices, approvals, zones and locations are read from and saved to the middleware API. Thresholds and the user list are not connected yet.</p></div></div>}
+          : <div className="admin-banner admin-banner--live" role="note"><span aria-hidden="true">i</span><div><strong>Live admin workspace</strong><p>Devices, approvals, zones and locations are read from and saved to the middleware API. Threshold management and the user list are not available yet.</p></div></div>}
         {notice && <div className="admin-notice" role="status">{notice}<button type="button" aria-label="Dismiss message" onClick={() => setNotice('')}>×</button></div>}
         {renderContent()}
         <footer className="admin-footer">Smart Museum · Admin <span>{isDemo ? 'Mock data only' : 'Live API data'}</span></footer>
@@ -520,10 +532,10 @@ export default function AdminApp({ dataSource = defaultDataSource, session = nul
   </div>;
 }
 
-function ApprovalRow({ device, processingId, onDecision }) {
+function ApprovalRow({ device, processingId, onDecision, simulated }) {
   const processing = processingId === device.deviceId;
   return <div className="admin-approval-row">
-    <div><strong>{device.deviceId}</strong><span>{device.type} · {device.zoneId} · {device.gatewayId}</span><small>Discovered {formatTimestamp(device.lastSeenAt)}. Decision is simulated.</small></div>
+    <div><strong>{device.deviceId}</strong><span>{device.type} · {device.zoneId} · {device.gatewayId}</span><small>{device.lastSeenAt ? `Discovered ${formatTimestamp(device.lastSeenAt)}.` : 'No activity recorded yet.'}{simulated ? ' Decision is simulated.' : ''}</small></div>
     <div className="admin-actions">
       <button type="button" className="admin-button admin-button--quiet" disabled={Boolean(processingId)} onClick={() => onDecision(device.deviceId, 'rejected')}>{processing ? 'Saving…' : 'Reject'}</button>
       <button type="button" className="admin-button" disabled={Boolean(processingId)} onClick={() => onDecision(device.deviceId, 'active')}>{processing ? 'Saving…' : 'Approve'}</button>

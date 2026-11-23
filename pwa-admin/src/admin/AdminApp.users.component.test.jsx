@@ -54,12 +54,16 @@ describe('Users and thresholds pages', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('An account with this email already exists.');
   });
 
-  it('marks thresholds as not connected and keeps their values illustrative', async () => {
+  it('does not offer thresholds with live data and keeps them illustrative in demo mode', async () => {
     renderApi();
     await screen.findByText('Live admin workspace');
+    expect(screen.queryByRole('link', { name: /Thresholds/ })).toBeNull();
+    cleanup();
+
+    render(<AdminApp />);
+    await screen.findByText('Total registered devices');
     await openPage('Thresholds');
     expect(screen.getByText('Not connected yet')).toBeTruthy();
-    expect(screen.getByText(/no thresholds endpoint yet/)).toBeTruthy();
     expect(screen.getByRole('table', { name: 'Illustrative environmental thresholds' })).toBeTruthy();
   });
 

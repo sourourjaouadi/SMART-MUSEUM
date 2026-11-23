@@ -20,6 +20,15 @@ export function fakeApi(overrides = {}) {
   return {
     getDevices: vi.fn(async () => devices),
     getZones: vi.fn(async () => zones),
+    getThingDescription: vi.fn(async (id) => ({
+      '@context': 'https://www.w3.org/2022/wot/td/v1.1',
+      id: `urn:museum:device:${id}`,
+      title: `BME280 ${id}`,
+      security: 'nosec_sc',
+      securityDefinitions: { nosec_sc: { scheme: 'nosec' } },
+      properties: { temperature: { type: 'number', unit: 'Cel' }, humidity: { type: 'number', unit: '%' } },
+      events: { alarm: {} },
+    })),
     approveDevice: vi.fn(async (id) => setStatus(id, 'active')),
     rejectDevice: vi.fn(async (id) => setStatus(id, 'rejected')),
     saveZone: vi.fn(async (id, body) => {
