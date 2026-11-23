@@ -1,0 +1,64 @@
+name: Frontend CI
+
+# Client and Admin PWAs: clean install, tests, API-mode build, WAR.
+# WARs are uploaded only when the repository variable PUBLIC_API_URL is set
+# (public value, for example https://<api-host>/api), so that a WAR built
+# for a placeholder address is never deployed by mistake.
+on:
+  push:
+    branches: [main, develop]
+    paths: ["pwa-client/**", "pwa-admin/**", ".github/workflows/frontend-ci.yml"]
+  pull_request:
+    paths: ["pwa-client/**", "pwa-admin/**", ".github/workflows/frontend-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  pwa:
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [client, admin]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: pwa-${{ matrix.app }}
+    env:
+      VITE_DATA_MODE: api
+      VITE_API_BASE_URL: ${{ vars.PUBLIC_API_URL || 'https://api.example.invalid/api' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: pwa-${{ matrix.app }}/package-lock.json
+      - run: npm ci
+      - name: Tests (mock mode, as in development)
+        env:
+          VITE_DATA_MODE: mock
+        run: npm test
+      - run: npm run build
+      - name: Check the production bundle
+        run: |
+          grep -qF "$VITE_API_BASE_URL" dist/assets/*.js
+          for text in "Continue with demo data" "localhost:8080" "smartmuseum.test"; do
+            if grep -lF "$text" dist/assets/*.js; then echo "::error::'$text' must not be in the bundle"; exit 1; fi
+          done
+          test -s dist/manifest.webmanifest
+          test -s dist/service-worker.js
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: mvn -B -f deployment/pom.xml clean package
+      - uses: actions/upload-artifact@v4
+        if: vars.PUBLIC_API_URL != ''
+        with:
+          name: smart-museum-${{ matrix.app }}-${{ github.sha }}
+          path: pwa-${{ matrix.app }}/deployment/target/smart-museum-${{ matrix.app }}.war
+          if-no-files-found: error
+          retention-days: 14

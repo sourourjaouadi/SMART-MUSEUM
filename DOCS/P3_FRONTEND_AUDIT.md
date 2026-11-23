@@ -7,8 +7,8 @@ database. Nothing here was checked on a public server: none exists yet.
 ## Summary
 
 Both PWAs use the real middleware API, and a change made in the Admin appears in
-an open Client at its next automatic refresh. Not done: frontend jobs in GitHub
-Actions (P3.6) and public verification (P3.7).
+an open Client at its next automatic refresh. The frontend workflow (P3.6) is written
+but has not run on GitHub yet. Public verification (P3.7) is not done.
 
 ## How it was checked
 
@@ -30,7 +30,7 @@ Actions (P3.6) and public verification (P3.7).
 | P3.3 Admin | Verified in the browser: ADMIN sign-in, refusal of disabled accounts, Thing Description, approval, zones, coordinates, device location, CLIENT creation with zones. Rejection, location inheritance and refusal of CLIENT accounts: browser run of 2026-11-16 and current component tests |
 | P3.4 Admin to Client | Verified; repeatable with [P3_DEMO_SCRIPT.md](P3_DEMO_SCRIPT.md) |
 | P3.5 Production builds | Ready for a public URL: the API URL is a build variable, and API builds contain no sample records and no local URL when another one is given |
-| P3.6 CI | Commands verified (below); the jobs are not in the workflow yet |
+| P3.6 CI | `.github/workflows/frontend-ci.yml`: linted with actionlint and its steps run in Linux containers with Node 24; first run on GitHub still to be checked |
 | P3.7 Public verification | Waiting for the server, domain and HTTPS |
 
 ## Authorization checked with a CLIENT token
@@ -73,7 +73,7 @@ mvn -B -f deployment/pom.xml clean package
   `pwa-admin/deployment/target/smart-museum-admin.war`.
 - `VITE_*` values are public. Never put a token or a password in them.
 - `CORS_ALLOWED_ORIGINS` must contain both exact public PWA origins.
-- At `89217da` the workflow calls `deployment/build-linux.sh`, which is not in the
-  repository, and pull requests that change only a PWA do not trigger it.
-- `deployment/build-all.ps1` always sets the local API URL.
-- `deployment/README.md` still says the Admin is disconnected from the API.
+- At `89217da`, `middleware-ci.yml` is rejected by actionlint (`pull_request` inside `push`,
+  undefined `java` variable) and calls `deployment/build-linux.sh`, which is not in the repository.
+- Set the repository variable `PUBLIC_API_URL` to have the workflow upload the two WARs.
+- Branch `feature/p2-production`: `build-all.ps1 -ApiBaseUrl`, and the server scripts.
