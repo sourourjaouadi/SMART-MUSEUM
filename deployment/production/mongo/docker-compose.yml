@@ -1,0 +1,16 @@
+# MongoDB of the production server: loopback only, authentication required.
+name: smart-museum-prod-db
+services:
+  mongo:
+    image: mongo:7
+    container_name: smart-museum-prod-mongo
+    restart: unless-stopped
+    env_file: ${SMART_MUSEUM_CONF:-/etc/smart-museum}/mongo.env
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./create-app-user.js:/docker-entrypoint-initdb.d/create-app-user.js:ro
+volumes:
+  mongo-data:
+    name: smart-museum-prod-mongo-data

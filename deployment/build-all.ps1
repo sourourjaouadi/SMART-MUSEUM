@@ -1,4 +1,8 @@
-param([switch]$SkipFrontendTests)
+param(
+    [switch]$SkipFrontendTests,
+    # Public API URL compiled into both PWAs (public value, never a secret).
+    [ValidatePattern('^https://[A-Za-z0-9.:-]+/api$')][string]$ApiBaseUrl = 'https://api.smartmuseum.test/api'
+)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -20,7 +24,7 @@ foreach ($app in @('pwa-client', 'pwa-admin')) {
     $previousDataMode = [Environment]::GetEnvironmentVariable('VITE_DATA_MODE', 'Process')
     try {
         # Both PWAs use the public HTTPS API; Admin in api mode requires a real ADMIN sign-in.
-        $env:VITE_API_BASE_URL = 'https://api.smartmuseum.test/api'
+        $env:VITE_API_BASE_URL = $ApiBaseUrl
         $env:VITE_DATA_MODE = 'api'
         Invoke-Checked 'npm.cmd' @('run', 'build') $appPath
     } finally {

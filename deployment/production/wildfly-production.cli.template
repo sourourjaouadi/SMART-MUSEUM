@@ -1,0 +1,22 @@
+# Rendered by configure-wildfly.sh; applied offline to a pristine standalone.xml.
+# Public traffic: Nginx terminates HTTPS and proxies to 127.0.0.1:8180.
+# CORE and IAM: internal-server only, HTTPS on 127.0.0.1:8443.
+embed-server --server-config=standalone.xml --std-out=discard
+batch
+/subsystem=undertow/server=default-server/https-listener=https:remove
+/socket-binding-group=standard-sockets/socket-binding=https:write-attribute(name=port,value=443)
+/socket-binding-group=standard-sockets/socket-binding=http:write-attribute(name=port,value=8180)
+/subsystem=undertow/server=default-server/http-listener=default:write-attribute(name=proxy-address-forwarding,value=true)
+/subsystem=undertow/server=default-server/host=smartmuseum-host:add(alias=["@CLIENT_HOST@"])
+/subsystem=undertow/server=default-server/host=admin-smartmuseum-host:add(alias=["@ADMIN_HOST@"])
+/subsystem=undertow/server=default-server/host=api-smartmuseum-host:add(alias=["@API_HOST@"])
+/subsystem=elytron/key-store=museumInternalKS:add(path="${env.TLS_KEYSTORE_PATH}",type=PKCS12,credential-reference={clear-text="${env.TLS_KEYSTORE_PASSWORD}"})
+/subsystem=elytron/key-manager=museumInternalKM:add(key-store=museumInternalKS,credential-reference={clear-text="${env.TLS_KEYSTORE_PASSWORD}"})
+/subsystem=elytron/server-ssl-context=museumInternalSSC:add(key-manager=museumInternalKM,protocols=["TLSv1.3","TLSv1.2"])
+/interface=internal:add(inet-address=127.0.0.1)
+/socket-binding-group=standard-sockets/socket-binding=internal-https:add(interface=internal,port=8443)
+/subsystem=undertow/server=internal-server:add(default-host=internal-host)
+/subsystem=undertow/server=internal-server/host=internal-host:add(alias=["localhost"])
+/subsystem=undertow/server=internal-server/https-listener=internal-https:add(socket-binding=internal-https,ssl-context=museumInternalSSC)
+run-batch
+stop-embedded-server

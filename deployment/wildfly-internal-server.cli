@@ -1,4 +1,4 @@
-# Internal Undertow server for the CORE and IAM services, on 127.0.0.1:8080 only.
+# Internal Undertow server for the CORE and IAM services, on loopback only.
 # Run offline (WildFly stopped) through deployment/configure-wildfly-ports.ps1.
 # Existing resources are left untouched, so re-running it is harmless.
 #
@@ -6,8 +6,9 @@
 # internal-server, virtual-host internal-host). They are therefore not served
 # by the public listeners on 80/443 under any Host header. The API calls them
 # through CORE_SERVICE_URL / IAM_SERVICE_URL = http://localhost:8080/core|iam
-# or https://localhost:8443/core|iam (production HTTPS).
-#
+# or https://localhost:8443/core|iam. The HTTPS listener uses the local TLS context
+# museumLocalDevSSC, so run configure-wildfly-https.ps1 first.
+# The production server uses deployment/production/ instead.
 
 embed-server --server-config=standalone.xml --std-out=discard
 
@@ -28,7 +29,7 @@ if (outcome != success) of /subsystem=undertow/server=internal-server:read-resou
     /subsystem=undertow/server=internal-server:add(default-host=internal-host)
     /subsystem=undertow/server=internal-server/host=internal-host:add(alias=["localhost"])
     /subsystem=undertow/server=internal-server/http-listener=internal:add(socket-binding=internal-http)
-    /subsystem=undertow/server=internal-server/https-listener=internal-https:add(socket-binding=internal-https)
+    /subsystem=undertow/server=internal-server/https-listener=internal-https:add(socket-binding=internal-https,ssl-context=museumLocalDevSSC)
     run-batch
 end-if
 

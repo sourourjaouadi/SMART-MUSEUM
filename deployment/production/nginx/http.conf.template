@@ -1,0 +1,12 @@
+# Stage 1, before the certificate exists: only the Let's Encrypt challenge.
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+server {
+    listen 80;
+    server_name @CLIENT_HOST@ @ADMIN_HOST@ @API_HOST@;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+    location / { return 404; }
+}
