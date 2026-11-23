@@ -1,0 +1,20 @@
+[Unit]
+Description=Smart Museum WildFly
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=smartmuseum
+Group=smartmuseum
+EnvironmentFile=/etc/smart-museum/prod.env
+ExecStart=/opt/smart-museum/wildfly/bin/standalone.sh -c standalone.xml
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
