@@ -313,7 +313,8 @@ the warning and scope below before running it.
 `deployment/build-all.ps1` configures the Client with the HTTPS API URL and
 API data mode for its production build. Configure the backend's
 `CORS_ALLOWED_ORIGINS` with the exact Client origin; never put secrets in Vite
-variables. Admin remains disconnected from the API.
+variables. Both API builds use the same public API URL; pass
+`build-all.ps1 -ApiBaseUrl https://<host>/api` for another server.
 
 The repeatable M2 integration/acceptance checks are in
 `deployment/test-m2-runtime.ps1`. They cover TLS verification, health probes,
