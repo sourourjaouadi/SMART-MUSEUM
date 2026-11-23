@@ -40,7 +40,7 @@ environment-specific setup.
 | WildFly | Implemented and locally runtime-verified | All five application WARs were reported enabled/`OK` during acceptance. Three service health probes returned HTTP 200 with Mongo `UP`. |
 | CLI/deployment scripts | Implemented | PowerShell wrappers deploy each app; CLI files add missing Undertow hosts without overwriting existing resources. Deployment script verifies staging and deployment markers and backs up before replacement. |
 | Properties | Implemented | Non-secret DEV settings and DEV/PROD environment templates exist. DEV points at the isolated M2 sandbox. Secrets are local/process values, not checked into templates. |
-| Frontend | Implemented | Client and Admin are standalone static WARs. Client production build targets the HTTPS API; Admin remains a disconnected/mock UI. |
+| Frontend | Implemented | Client and Admin are standalone static WARs. Both API builds use the HTTPS API; see [P3_FRONTEND_AUDIT.md](P3_FRONTEND_AUDIT.md). |
 | Domains | Implemented locally | Windows hosts entries resolve `smartmuseum.test`, `admin.smartmuseum.test`, and `api.smartmuseum.test` to loopback on the checked development machine. This is local hosts-file mapping, not public DNS. |
 | HTTPS | Implemented and locally browser-verified | WildFly HTTPS listener uses separate environment-backed M2 Elytron resources. Edge loaded all public sites without certificate errors; redirects and Client service worker were verified. |
 
