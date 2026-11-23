@@ -80,7 +80,7 @@ export default function App() {
         clearSession();
         setSession(null);
         if (DEFAULT_DATA_MODE === DATA_MODES.API) {
-          setDashboardMode(DATA_MODES.MOCK);
+          setDashboardMode(DATA_MODES.API);
           setShowLogin(true);
           return;
         }

@@ -18,7 +18,7 @@ export default function ClientLogin({ onAuthenticated, onDemo, expired = false }
       try {
         session = saveSession(response);
       } catch {
-        setError('This browser cannot keep a sign-in session. Enable session storage or continue with demo data.');
+        setError('This browser cannot keep a sign-in session. Enable session storage and try again.');
         return;
       }
       setPassword('');
@@ -77,13 +77,18 @@ export default function ClientLogin({ onAuthenticated, onDemo, expired = false }
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-        <div className="login-divider"><span>or</span></div>
-        <button className="login-demo" type="button" onClick={onDemo}>
-          Continue with demo data
-        </button>
-        <p className="login-footnote">
-          Live readings require a backend connection. Demo mode uses local sample records.
-        </p>
+        {/* Vite inlines VITE_DATA_MODE: api builds drop the demo entry from the bundle. */}
+        {import.meta.env.VITE_DATA_MODE !== 'api' && (
+          <>
+            <div className="login-divider"><span>or</span></div>
+            <button className="login-demo" type="button" onClick={onDemo}>
+              Continue with demo data
+            </button>
+            <p className="login-footnote">
+              Live readings require a backend connection. Demo mode uses local sample records.
+            </p>
+          </>
+        )}
       </section>
     </main>
   );

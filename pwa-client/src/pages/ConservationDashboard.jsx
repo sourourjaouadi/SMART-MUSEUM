@@ -77,6 +77,10 @@ export default function ConservationDashboard({
     description: 'Zone information is unavailable.',
   };
 
+  // Name managed by the administrator (GET /api/zones); falls back to the label built from the ID.
+  const selectedZoneName =
+    (liveState.zone?.zoneId === selectedZoneId && liveState.zone.name) || selectedZone.name;
+
   useEffect(() => {
     if (!zones.some((zone) => zone.id === selectedZoneId)) {
       setSelectedZoneId(zones[0]?.id ?? '');
@@ -247,41 +251,44 @@ export default function ConservationDashboard({
                 ))}
               </select>
             </div>
-            <fieldset className="data-mode-control">
-              <legend>Data source</legend>
-              <label className={isDemo ? 'data-mode-control__option is-selected' : 'data-mode-control__option'}>
-                <input
-                  type="radio"
-                  name="data-mode"
-                  value={DATA_MODES.MOCK}
-                  checked={isDemo}
-                  onChange={() => {
-                    setLiveState(INITIAL_LIVE_STATE);
-                    setSelectedZoneId(getAvailableZones()[0]?.id ?? '');
-                    setDataMode(DATA_MODES.MOCK);
-                  }}
-                />
-                <span>Demo preview</span>
-              </label>
-              <label className={!isDemo ? 'data-mode-control__option is-selected' : 'data-mode-control__option'}>
-                <input
-                  type="radio"
-                  name="data-mode"
-                  value={DATA_MODES.API}
-                  checked={!isDemo}
-                  onChange={() => {
-                    if (!session && onLoginRequested) {
-                      onLoginRequested();
-                      return;
-                    }
-                    setLiveState(INITIAL_LIVE_STATE);
-                    setSelectedZoneId('');
-                    setDataMode(DATA_MODES.API);
-                  }}
-                />
-                <span>Live API</span>
-              </label>
-            </fieldset>
+            {/* No demo source in api builds (VITE_DATA_MODE is inlined by Vite). */}
+            {import.meta.env.VITE_DATA_MODE !== 'api' && (
+              <fieldset className="data-mode-control">
+                <legend>Data source</legend>
+                <label className={isDemo ? 'data-mode-control__option is-selected' : 'data-mode-control__option'}>
+                  <input
+                    type="radio"
+                    name="data-mode"
+                    value={DATA_MODES.MOCK}
+                    checked={isDemo}
+                    onChange={() => {
+                      setLiveState(INITIAL_LIVE_STATE);
+                      setSelectedZoneId(getAvailableZones()[0]?.id ?? '');
+                      setDataMode(DATA_MODES.MOCK);
+                    }}
+                  />
+                  <span>Demo preview</span>
+                </label>
+                <label className={!isDemo ? 'data-mode-control__option is-selected' : 'data-mode-control__option'}>
+                  <input
+                    type="radio"
+                    name="data-mode"
+                    value={DATA_MODES.API}
+                    checked={!isDemo}
+                    onChange={() => {
+                      if (!session && onLoginRequested) {
+                        onLoginRequested();
+                        return;
+                      }
+                      setLiveState(INITIAL_LIVE_STATE);
+                      setSelectedZoneId('');
+                      setDataMode(DATA_MODES.API);
+                    }}
+                  />
+                  <span>Live API</span>
+                </label>
+              </fieldset>
+            )}
           </section>
 
           <StatusMessage
@@ -356,7 +363,7 @@ export default function ConservationDashboard({
           <section className="zone-overview" aria-label="Zone overview">
             <div className="zone-overview__intro">
               <p className="eyebrow">Selected environment</p>
-              <h2>{selectedZone.name}</h2>
+              <h2>{selectedZoneName}</h2>
               <p>{selectedZone.description}</p>
             </div>
             <ZoneDetails
