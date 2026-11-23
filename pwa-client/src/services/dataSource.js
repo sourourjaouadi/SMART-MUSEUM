@@ -4,7 +4,13 @@ import {
   getMeasurements as getApiMeasurements,
   getZones as getApiZones,
 } from './api.js';
-import { MOCK_DATA } from './mockData.js';
+import { MOCK_DATA as DEMO_DATA } from './mockData.js';
+
+// Demo records exist only in mock builds: Vite inlines VITE_DATA_MODE, so api builds
+// keep the empty set and drop the sample data from the bundle.
+const MOCK_DATA = import.meta.env?.VITE_DATA_MODE === 'api'
+  ? { devices: [], measurements: [], zones: [] }
+  : DEMO_DATA;
 
 export const DATA_MODES = Object.freeze({
   MOCK: 'mock',

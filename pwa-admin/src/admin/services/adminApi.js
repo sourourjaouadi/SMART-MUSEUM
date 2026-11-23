@@ -35,14 +35,14 @@ async function readBackendError(response) {
   }
 }
 
-function httpErrorMessage(status, { authenticated, conflictMessage, backendError }) {
+function httpErrorMessage(status, { authenticated, conflictMessage, notFoundMessage, backendError }) {
   if (status === 401) {
     return authenticated
       ? 'Your session has ended. Sign in again.'
       : 'The email or password was not accepted.';
   }
   if (status === 403) return 'This action requires an administrator account.';
-  if (status === 404) return 'This device or zone no longer exists. Refresh the list.';
+  if (status === 404) return notFoundMessage ?? 'This device or zone no longer exists. Refresh the list.';
   if (status === 409) return conflictMessage ?? 'The request conflicts with the current state. Refresh and try again.';
   if (status === 400) {
     return typeof backendError?.message === 'string' && backendError.message.length <= 300
@@ -92,6 +92,19 @@ function isZone(zone) {
   );
 }
 
+function isThingDescription(td) {
+  return (
+    td != null &&
+    typeof td === 'object' &&
+    !Array.isArray(td) &&
+    typeof td.id === 'string' &&
+    typeof td.title === 'string' &&
+    ['properties', 'actions', 'events'].every(
+      (field) => td[field] == null || (typeof td[field] === 'object' && !Array.isArray(td[field])),
+    )
+  );
+}
+
 function invalid(endpoint) {
   return new ApiError(`${endpoint} returned an unexpected response.`, { code: 'INVALID_RESPONSE' });
 }
@@ -134,6 +147,7 @@ export function createAdminApiClient({
     body,
     authenticated = true,
     conflictMessage,
+    notFoundMessage,
     signal,
   } = {}) {
     if (typeof fetchImpl !== 'function') {
@@ -178,7 +192,7 @@ export function createAdminApiClient({
         const backendError = await readBackendError(response);
         if (response.status === 401 && authenticated) onUnauthorized();
         throw new ApiError(
-          httpErrorMessage(response.status, { authenticated, conflictMessage, backendError }),
+          httpErrorMessage(response.status, { authenticated, conflictMessage, notFoundMessage, backendError }),
           { code: 'HTTP_ERROR', status: response.status, backendError },
         );
       }
@@ -207,6 +221,15 @@ export function createAdminApiClient({
 
     async getDevices(options) {
       return list(await request('/api/devices', options), isDevice, '/api/devices');
+    },
+
+    /** W3C WoT Thing Description of a device (ADMIN only). */
+    async getThingDescription(deviceId, options) {
+      const path = `/api/things/${segment(deviceId, 'deviceId')}`;
+      return one(await request(path, {
+        ...options,
+        notFoundMessage: 'No Thing Description is registered for this device.',
+      }), isThingDescription, path);
     },
 
     async approveDevice(deviceId, options) {

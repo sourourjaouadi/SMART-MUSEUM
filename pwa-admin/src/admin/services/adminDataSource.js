@@ -1,4 +1,3 @@
-import { ADMIN_MOCK_DATA } from '../data/mockData.js';
 import { createAdminApiClient } from './adminApi.js';
 import {
   getAdminSnapshot,
@@ -89,8 +88,8 @@ export function createApiDataSource(api = createAdminApiClient()) {
         label: 'Live data from the Smart Museum middleware.',
         devices,
         zones: mergeZones(zones, devices),
-        // Not connected yet: no thresholds or user-list endpoint exists. Values are illustrative.
-        thresholds: ADMIN_MOCK_DATA.thresholds,
+        // No thresholds or user-list endpoint exists; no sample values in API mode.
+        thresholds: [],
         users: [],
       };
     },
@@ -113,6 +112,7 @@ export function createApiDataSource(api = createAdminApiClient()) {
         : await api.assignDeviceLocation(deviceId, validateLocation(location));
       return { devices: snapshot.devices.map((device) => (device.deviceId === deviceId ? updated : device)) };
     },
+    getThingDescription: (deviceId) => api.getThingDescription(deviceId),
     provisionClient: (fields) => api.provisionClient(validateClientAccount(fields)),
   };
 }

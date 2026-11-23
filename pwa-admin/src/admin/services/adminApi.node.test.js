@@ -92,6 +92,15 @@ test('maps 403, 404 and contextual 409 responses to admin messages', async () =>
   );
 });
 
+test('reads a Thing Description and explains when none is registered', async () => {
+  const td = { id: 'urn:museum:device:test-01', title: 'Test', properties: { temperature: { unit: 'Cel' } } };
+  const { api, calls } = client(() => response(200, td));
+  assert.deepEqual(await api.getThingDescription('test-01'), td);
+  assert.equal(`${calls[0].method} ${calls[0].url.slice(BASE.length)}`, 'GET /things/test-01');
+  await assert.rejects(client(() => response(404, { error: 'NOT_FOUND', message: 'x' })).api.getThingDescription('test-01'), /No Thing Description is registered/);
+  await assert.rejects(client(() => response(200, { title: 'no id' })).api.getThingDescription('test-01'), (e) => e.code === 'INVALID_RESPONSE');
+});
+
 test('reports network failures and timeouts distinctly', async () => {
   await assert.rejects(
     client(() => { throw new TypeError('Failed to fetch'); }).api.getDevices(),

@@ -1,15 +1,15 @@
 # Smart Museum Client PWA
 
 Responsive React + Vite dashboard for museum environmental monitoring. The
-dashboard starts in **Demo preview** mode and uses clearly labeled mock
-measurements, so it can be developed before the backend is available.
+development default is **Demo preview** with clearly labeled mock measurements.
+API builds (`VITE_DATA_MODE=api`) contain no demo data and require a sign-in.
 
 For the complete Person 3 overview, functional guide, API boundary, Mermaid
 diagrams, and test coverage, see the [PWA documentation](../DOCS/pwa-client.md).
 
 ## Requirements
 
-- Node.js 20.19+ or 22.12+
+- Node.js 22.12+ (22.x) or 24.x (required by Vitest 5)
 - npm
 
 ## Local development
@@ -75,8 +75,7 @@ Vite variables are public browser configuration only. Never put service
 tokens, JWT signing keys, bootstrap credentials, or other server secrets in
 `.env` or frontend code.
 
-To use demo mode, keep `VITE_DATA_MODE=mock`, or choose **Continue with demo
-data** on sign-in. Demo mode uses only `src/services/mockData.js` and does not
+To use demo mode, keep `VITE_DATA_MODE=mock`; API builds have no demo entry. Demo mode uses only `src/services/mockData.js` and does not
 depend on backend availability. Select **Live API** when an active backend
 account is available. Logout clears the browser token; with `VITE_DATA_MODE=api`
 the app returns to sign-in, while a default demo-configured app returns to

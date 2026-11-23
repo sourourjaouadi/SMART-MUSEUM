@@ -54,7 +54,8 @@ come from the `prod.*.example` templates.
 | Zones | `GET /api/zones`, `PUT /api/zones/{zoneId}` (name + WGS84 location). Device zones without a zone record are listed as "No zone record yet" and can be created |
 | Device location | `PUT` / `DELETE /api/devices/{id}/location`; inherited locations are labelled "from zone", own positions "own position"; the zone never changes |
 | Users | "Create a CLIENT account" form using `POST /api/users`. The user list is **not connected yet** (no list endpoint) |
-| Thresholds | **Not connected yet**: no thresholds endpoint; the values shown are illustrative |
+| Thing Description | `GET /api/things/{id}`, from Pending approvals and from device details |
+| Thresholds | Not offered in API mode: no thresholds endpoint. Mock mode keeps illustrative values |
 
 Location, zone-name and account fields are validated locally with the backend
 rules before any request.
